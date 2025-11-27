@@ -74,8 +74,11 @@ class Costmap {
     Eigen::Vector2i local_center_ = Eigen::Vector2i::Zero();  // origin cell index
 
     static constexpr double P_UNKNOWN = 0.5;
-    static constexpr double P_FREE = 0.4;
-    static constexpr double P_OCCUPIED = 0.6;
+    static constexpr double P_FREE = 0.3;
+    static constexpr double P_OCCUPIED = 0.7;
+
+    static constexpr double P_MIN = 0.05;
+    static constexpr double P_MAX = 0.95;
 
     pcl::PointCloud<PointType>::Ptr cur_point_cloud_;
     pcl::PointCloud<PointType>::Ptr cur_point_cloud_transformed_;

@@ -177,7 +177,14 @@ bool Costmap::IsInBounds(int x, int y) const {
 
 void Costmap::UpdateCell(int x, int y, double p) {
     if (IsInBounds(x, y)) {
-        global_costmap_(x, y) = global_costmap_(x, y) + ProbabilityToLogOdds(p) - ProbabilityToLogOdds(P_UNKNOWN);
+        double new_odds = global_costmap_(x, y) + ProbabilityToLogOdds(p) - ProbabilityToLogOdds(P_UNKNOWN);
+        if (new_odds < ProbabilityToLogOdds(P_MIN)) {
+            new_odds = ProbabilityToLogOdds(P_MIN);
+        }
+        if (new_odds > ProbabilityToLogOdds(P_MAX)) {
+            new_odds = ProbabilityToLogOdds(P_MAX);
+        }
+        global_costmap_(x, y) = new_odds;
     }
 }
 
