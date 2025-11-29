@@ -9,3 +9,4 @@
       serial_port_name: "/dev/ttyUSB0"
       serial_baudrate: 115200
       control_command_deadline: 100 # [msec]
+      use_dummy_hardware: false  # Set to true to test hardware control without a serial connection.

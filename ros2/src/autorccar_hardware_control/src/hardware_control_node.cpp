@@ -66,6 +66,8 @@ class HardwareControlNode : public rclcpp::Node {
                                       parameters_.serial_port_name);
         get_parameter_or<int>("hardware_control.serial_baudrate", parameters_.serial_baudrate,
                               parameters_.serial_baudrate);
+        get_parameter_or<bool>("hardware_control.use_dummy_hardware", parameters_.use_dummy_hardware,
+                               parameters_.use_dummy_hardware);
         get_parameter_or<int>("hardware_control.control_command_deadline", control_command_deadline_,
                               control_command_deadline_);
     }
@@ -79,11 +81,11 @@ class HardwareControlNode : public rclcpp::Node {
 
     void GcsCommandCallback(const std_msgs::msg::Int8& msg) const {
         if (msg.data == 0) {
-            hardware_controller_->SetDriveCommand(DriveCommand::kStop);
+                hardware_controller_->SetDriveCommand(DriveCommand::kStop);
         } else if (msg.data == 1) {
-            hardware_controller_->SetDriveCommand(DriveCommand::kStart);
-        } else {
-            hardware_controller_->SetDriveCommand(DriveCommand::kStop);
+                    hardware_controller_->SetDriveCommand(DriveCommand::kStart);
+                } else {
+                hardware_controller_->SetDriveCommand(DriveCommand::kStop);
             std::cout << "Have undefined drive command." << std::endl;
         }
     }
