@@ -52,9 +52,21 @@ class HardwareControlNode : public rclcpp::Node {
             rclcpp::SystemDefaultsQoS().deadline(std::chrono::milliseconds(control_command_deadline_)),
             control_command_callback, control_command_subscription_options);
 
+        auto teleop_control_command_callback = [this](autorccar_interfaces::msg::ControlCommand::UniquePtr msg) {
+            this->TeleopControlCommandCallback(*msg);
+        };
+        teleop_control_command_subscriber_ = create_subscription<autorccar_interfaces::msg::ControlCommand>(
+            "teleop/control_command", rclcpp::SystemDefaultsQoS(), teleop_control_command_callback);
+
         auto gcs_command_callback = [this](std_msgs::msg::Int8::UniquePtr msg) { this->GcsCommandCallback(*msg); };
         gcs_command_subscriber_ =
             create_subscription<std_msgs::msg::Int8>("gcs/command", rclcpp::SystemDefaultsQoS(), gcs_command_callback);
+
+        auto teleop_command_callback = [this](std_msgs::msg::Int8::UniquePtr msg) {
+            this->TeleopCommandCallback(*msg);
+        };
+        teleop_command_subscriber_ = create_subscription<std_msgs::msg::Int8>(
+            "teleop/command", rclcpp::SystemDefaultsQoS(), teleop_command_callback);
     }
 
    private:
@@ -72,7 +84,18 @@ class HardwareControlNode : public rclcpp::Node {
                               control_command_deadline_);
     }
 
-    void ControlCommandCallback(const autorccar_interfaces::msg::ControlCommand& msg) const {
+    void ControlCommandCallback(const autorccar_interfaces::msg::ControlCommand& msg) {
+        if (is_teleop_mode_) return;
+
+        autorccar::hardware_control::ControlCommand control_command;
+        control_command.speed = msg.speed;
+        control_command.steering_angle = msg.steering_angle;
+        hardware_control_command_publisher_->publish(ToMsg(hardware_controller_->SendControlCommand(control_command)));
+    }
+
+    void TeleopControlCommandCallback(const autorccar_interfaces::msg::ControlCommand& msg) {
+        if (!is_teleop_mode_) return;
+
         autorccar::hardware_control::ControlCommand control_command;
         control_command.speed = msg.speed;
         control_command.steering_angle = msg.steering_angle;
@@ -80,13 +103,50 @@ class HardwareControlNode : public rclcpp::Node {
     }
 
     void GcsCommandCallback(const std_msgs::msg::Int8& msg) const {
-        if (msg.data == 0) {
+        switch (msg.data) {
+            case 0:
                 hardware_controller_->SetDriveCommand(DriveCommand::kStop);
-        } else if (msg.data == 1) {
+                std::cout << "GCS: Stopped." << std::endl;
+                break;
+            case 1:
+                if (!is_teleop_mode_) {
                     hardware_controller_->SetDriveCommand(DriveCommand::kStart);
+                    std::cout << "GCS: Started." << std::endl;
                 } else {
+                    std::cout << "GCS: Start command ignored. Teleop mode ENABLED." << std::endl;
+                }
+                break;
+            default:
                 hardware_controller_->SetDriveCommand(DriveCommand::kStop);
-            std::cout << "Have undefined drive command." << std::endl;
+                std::cout << "GCS: Undefined command received. Stopping." << std::endl;
+                break;
+        }
+    }
+
+    void TeleopCommandCallback(const std_msgs::msg::Int8& msg) {
+        switch (msg.data) {
+            case 0:
+                hardware_controller_->SetDriveCommand(DriveCommand::kStop);
+                is_teleop_mode_ = true;
+                std::cout << "Teleop: Stopped. Teleop mode ENABLED." << std::endl;
+                break;
+            case 1:
+                if (is_teleop_mode_) {
+                    hardware_controller_->SetDriveCommand(DriveCommand::kStart);
+                    std::cout << "Teleop: Started in teleop mode." << std::endl;
+                } else {
+                    std::cout << "Teleop: Start command ignored. Teleop mode is DISABLED." << std::endl;
+                }
+                break;
+            case 2:
+                hardware_controller_->SetDriveCommand(DriveCommand::kStop);
+                is_teleop_mode_ = false;
+                std::cout << "Teleop: Stopped. Teleop mode DISABLED." << std::endl;
+                break;
+            default:
+                hardware_controller_->SetDriveCommand(DriveCommand::kStop);
+                std::cout << "Teleop: Undefined command received. Stopping." << std::endl;
+                break;
         }
     }
 
@@ -98,10 +158,13 @@ class HardwareControlNode : public rclcpp::Node {
 
     // subscriber
     rclcpp::Subscription<autorccar_interfaces::msg::ControlCommand>::SharedPtr control_command_subscriber_;
+    rclcpp::Subscription<autorccar_interfaces::msg::ControlCommand>::SharedPtr teleop_control_command_subscriber_;
     rclcpp::Subscription<std_msgs::msg::Int8>::SharedPtr gcs_command_subscriber_;
+    rclcpp::Subscription<std_msgs::msg::Int8>::SharedPtr teleop_command_subscriber_;
 
     // variables
     int control_command_deadline_{1000};
+    bool is_teleop_mode_{false};
 };
 
 int main(int argc, char** argv) {

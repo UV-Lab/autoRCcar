@@ -26,7 +26,7 @@ bool HardwareControl::GotStartCommand() const { return drive_command_ == DriveCo
 
 ControlCommand HardwareControl::SendControlCommand(ControlCommand& control_command) {
     if (!GotStartCommand()) {
-        std::cout << "Have not received start command from GCS yet." << std::endl;
+        std::cout << "Have not received start command yet." << std::endl;
         SendStopMessage();
         return {};
     }
