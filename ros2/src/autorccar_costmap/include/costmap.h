@@ -80,6 +80,10 @@ class Costmap {
     static constexpr double P_MIN = 0.05;
     static constexpr double P_MAX = 0.95;
 
+    double log_odds_unknown_;
+    double log_odds_min_;
+    double log_odds_max_;
+
     pcl::PointCloud<PointType>::Ptr cur_point_cloud_;
     pcl::PointCloud<PointType>::Ptr cur_point_cloud_transformed_;
     pcl::PointCloud<PointType>::Ptr cur_point_cloud_filtered_;

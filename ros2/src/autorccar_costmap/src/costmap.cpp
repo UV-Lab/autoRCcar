@@ -9,6 +9,11 @@ Costmap::Costmap(std::shared_ptr<ConfigReader> config_reader) : costmap_flag_(fa
     resolution_ = config_.global_resolution;
     cnt_limit_ = config_.global_update_per_lidar;
 
+    // Pre-calculate constant log odds values
+    log_odds_unknown_ = ProbabilityToLogOdds(P_UNKNOWN);
+    log_odds_min_ = ProbabilityToLogOdds(P_MIN);
+    log_odds_max_ = ProbabilityToLogOdds(P_MAX);
+
     // Initialize global costmap
     global_size_ = {static_cast<int>(config_.global_width / resolution_), static_cast<int>(config_.global_height / resolution_)};
     global_center_ = {global_size_.x() / 2, global_size_.y() / 2};
@@ -46,7 +51,7 @@ Costmap::Costmap(std::shared_ptr<ConfigReader> config_reader) : costmap_flag_(fa
 
 void Costmap::InitCostmap(Eigen::MatrixXd& costmap, int size_x, int size_y) {
     costmap.resize(size_x, size_y);
-    costmap.setConstant(ProbabilityToLogOdds(P_UNKNOWN));
+    costmap.setConstant(log_odds_unknown_);
 }
 
 void Costmap::UpdatePointCloud(const pcl::PointCloud<PointType>::Ptr pcl) {
@@ -177,13 +182,8 @@ bool Costmap::IsInBounds(int x, int y) const {
 
 void Costmap::UpdateCell(int x, int y, double p) {
     if (IsInBounds(x, y)) {
-        double new_odds = global_costmap_(x, y) + ProbabilityToLogOdds(p) - ProbabilityToLogOdds(P_UNKNOWN);
-        if (new_odds < ProbabilityToLogOdds(P_MIN)) {
-            new_odds = ProbabilityToLogOdds(P_MIN);
-        }
-        if (new_odds > ProbabilityToLogOdds(P_MAX)) {
-            new_odds = ProbabilityToLogOdds(P_MAX);
-        }
+        double new_odds = global_costmap_(x, y) + ProbabilityToLogOdds(p) - log_odds_unknown_;
+        new_odds = std::clamp(new_odds, log_odds_min_, log_odds_max_);
         global_costmap_(x, y) = new_odds;
     }
 }
@@ -194,7 +194,7 @@ double Costmap::LogOddsToProbability(double l) const { return std::exp(l) / (1.0
 
 void Costmap::UpdateLocalCostmap() {
     // initialize local costmap.
-    local_costmap_.setConstant(ProbabilityToLogOdds(P_UNKNOWN));
+    local_costmap_.setConstant(log_odds_unknown_);
 
     // Get cell indices of current pose.
     const int px = std::floor(cur_pose_(0, 3) / resolution_) + global_center_.x();
