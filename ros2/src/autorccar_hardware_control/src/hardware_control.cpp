@@ -13,8 +13,11 @@ HardwareControl::HardwareControl(const Parameters& parameters) : parameters_(par
     std::cout << "max_steering_angle: " << parameters_.max_steering_angle << std::endl;
     std::cout << "serial_port_name: " << parameters_.serial_port_name << std::endl;
     std::cout << "serial_baudrate: " << parameters_.serial_baudrate << std::endl;
+    std::cout << "use_dummy_hardware: " << parameters_.use_dummy_hardware << std::endl;
 
-    file_descriptor_ = SerialInitialize(parameters_.serial_port_name, parameters_.serial_baudrate);
+    if (!parameters_.use_dummy_hardware) {
+        file_descriptor_ = SerialInitialize(parameters_.serial_port_name, parameters_.serial_baudrate);
+    }
 }
 
 void HardwareControl::SetDriveCommand(const DriveCommand& drive_command) { drive_command_ = drive_command; }
@@ -23,7 +26,7 @@ bool HardwareControl::GotStartCommand() const { return drive_command_ == DriveCo
 
 ControlCommand HardwareControl::SendControlCommand(ControlCommand& control_command) {
     if (!GotStartCommand()) {
-        std::cout << "Have not received start command from GCS yet." << std::endl;
+        std::cout << "Have not received start command yet." << std::endl;
         SendStopMessage();
         return {};
     }
@@ -86,6 +89,8 @@ Pwm HardwareControl::ConvertCommandToPwm(const ControlCommand& control_command) 
 }
 
 int HardwareControl::SerializeAndSendMessage(const Pwm& pwm) const {
+    if (parameters_.use_dummy_hardware) return -1;
+
     char msg_tx[8];
 
     msg_tx[0] = static_cast<char>(0xFF);  // header

@@ -36,10 +36,11 @@ struct Pwm {
 const std::map<int, speed_t> baudrate_map = {{57600, B57600}, {115200, B115200}, {230400, B230400}, {460800, B460800}};
 
 struct Parameters {
-    double max_speed;
-    double max_steering_angle;
+    double max_speed{0.0};
+    double max_steering_angle{0.0};
     std::string serial_port_name;
-    int serial_baudrate;
+    int serial_baudrate{0};
+    bool use_dummy_hardware{false};
 };
 
 class HardwareControl {
