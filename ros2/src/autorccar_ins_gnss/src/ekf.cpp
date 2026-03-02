@@ -70,6 +70,8 @@ void EKF::LoadSettings(const std::string& config) {
     YAML::Node cfg = YAML::LoadFile(config);
 
     // user settings
+    nav_frame = cfg["navigation_frame"].as<std::string>();
+
     alignment_time = cfg["alignment_time_sec"].as<double>();
     yaw_init = cfg["initial_yaw_deg"].as<double>();
 
@@ -166,8 +168,13 @@ void EKF::Alignment() {
     pos_origin << gps_pos_ecef.x(), gps_pos_ecef.y(), gps_pos_ecef.z();  // origin position (ECEF)
 
     LLH = ECEF2LLH(gps_pos_ecef);
-    Ce2n << -sin(LLH.x()) * cos(LLH.y()), -sin(LLH.x()) * sin(LLH.y()), cos(LLH.x()), -sin(LLH.y()), cos(LLH.y()), 0,
-        -cos(LLH.x()) * cos(LLH.y()), -cos(LLH.x()) * sin(LLH.y()), -sin(LLH.x());
+    double lat = LLH.x();
+    double lon = LLH.y();
+
+    // ECEF to NED transformation
+    Ce2n << -sin(lat) * cos(lon),  -sin(lat) * sin(lon),  cos(lat),
+            -sin(lon),              cos(lon),             0,
+            -cos(lat) * cos(lon),  -cos(lat) * sin(lon), -sin(lat);
 
     pos_ned = Ce2n * (gps_pos_ecef - pos_origin);
     vel_ned = Ce2n * gps_vel_ecef;
@@ -178,8 +185,8 @@ void EKF::Alignment() {
     std::cout << "Initial Attitude (deg): " << att_eul[0] * 180 / M_PI << ", " << att_eul[1] * 180 / M_PI << ", "
               << att_eul[2] * 180 / M_PI << std::endl;
     std::cout << std::endl;
-
-    // // Set Initial state
+    
+    // Set Initial state
     nav_sol.SetNavSol(imu_time_now, pos_origin, pos_ned, vel_ned, att_quat, bias_acc, bias_gyro);
     nav_sol.SetImu(imu_acc, imu_gyro);
 
@@ -317,8 +324,13 @@ NavSol* EKF::Correct() {
 
     // LLH = ECEF2LLH(gps_pos_ecef);
     LLH = ECEF2LLH(pos_origin);
-    Ce2n << -sin(LLH.x()) * cos(LLH.y()), -sin(LLH.x()) * sin(LLH.y()), cos(LLH.x()), -sin(LLH.y()), cos(LLH.y()), 0,
-        -cos(LLH.x()) * cos(LLH.y()), -cos(LLH.x()) * sin(LLH.y()), -sin(LLH.x());
+    double lat = LLH.x();
+    double lon = LLH.y();
+
+    // ECEF to NED transformation
+    Ce2n << -sin(lat) * cos(lon),  -sin(lat) * sin(lon),  cos(lat),
+            -sin(lon),              cos(lon),             0,
+            -cos(lat) * cos(lon),  -cos(lat) * sin(lon), -sin(lat);
 
     gps_pos_ned = Ce2n * (gps_pos_ecef - pos_origin);
     gps_vel_ned = Ce2n * (gps_vel_ecef);

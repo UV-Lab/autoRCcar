@@ -43,12 +43,15 @@ class EKF {
     NavSol* Predict();
     NavSol* Correct();
 
+    std::string GetNavFrame() const { return nav_frame; }
+
    private:
     double time_init;  // EKF start time, to check alignment
 
-    std::string config;  // EKF config file
+    std::string config;     // EKF config file
+    std::string nav_frame;  // "NED" or "ENU"
 
-    // initialization variables
+    // Initialization variables
     int alignment_cnt;
     double alignment_time;   // [sec]
     double yaw_init;         // [deg]

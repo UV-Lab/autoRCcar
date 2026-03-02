@@ -1,5 +1,6 @@
 ---
 # user settings
+navigation_frame: "ENU"    # ROS Navigation frame: "NED" or "ENU" 
 alignment_time_sec: 10.0
 initial_yaw_deg: 0.0
 

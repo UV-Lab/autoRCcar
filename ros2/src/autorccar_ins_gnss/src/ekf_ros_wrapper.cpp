@@ -3,6 +3,7 @@
 #include <eigen3/Eigen/Dense>
 
 #include "ekf.h"
+#include "ins_toolbox.h"
 #include "rclcpp/rclcpp.hpp"
 
 EKFWrapper::EKFWrapper(EKF* pEKF) : Node("ins_gps"), mpEKF(pEKF) {
@@ -21,14 +22,13 @@ EKFWrapper::EKFWrapper(EKF* pEKF) : Node("ins_gps"), mpEKF(pEKF) {
 }
 
 void EKFWrapper::ImuCallback(const autorccar_interfaces::msg::Imu& msg) {
-    // double imu_time = msg.timestamp.sec + msg.timestamp.nanosec*1e-9;
-    // Eigen::Vector3d acc = Eigen::Vector3d(msg.linear_acceleration.x, msg.linear_acceleration.y,
-    // msg.linear_acceleration.z); Eigen::Vector3d gyro = Eigen::Vector3d(msg.angular_velocity.x,
-    // msg.angular_velocity.y, msg.angular_velocity.z);
-    double imu_time = msg.timestamp.sec + msg.timestamp.nanosec * 1e-9;
-    Eigen::Vector3d acc =
-        Eigen::Vector3d(msg.linear_acceleration.y, msg.linear_acceleration.x, -msg.linear_acceleration.z);
-    Eigen::Vector3d gyro = Eigen::Vector3d(msg.angular_velocity.y, msg.angular_velocity.x, -msg.angular_velocity.z);
+    double imu_time = msg.timestamp.sec + msg.timestamp.nanosec*1e-9;
+    Eigen::Vector3d acc = Eigen::Vector3d(msg.linear_acceleration.x, msg.linear_acceleration.y, msg.linear_acceleration.z); 
+    Eigen::Vector3d gyro = Eigen::Vector3d(msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z);
+    // double imu_time = msg.timestamp.sec + msg.timestamp.nanosec * 1e-9;
+    // Eigen::Vector3d acc =
+    //     Eigen::Vector3d(msg.linear_acceleration.y, msg.linear_acceleration.x, -msg.linear_acceleration.z);
+    // Eigen::Vector3d gyro = Eigen::Vector3d(msg.angular_velocity.y, msg.angular_velocity.x, -msg.angular_velocity.z);
 
     // Set EKF start time
     if (!mpEKF->is_time_set) {
@@ -72,6 +72,28 @@ void EKFWrapper::InitYawCallback(const std_msgs::msg::Float32& msg) {
 
 void EKFWrapper::PublishNavSol() {
     Eigen::Matrix<double, 20, 1> x = mpSol->GetNavRosMsg();
+
+    if (mpEKF->GetNavFrame() == "ENU") {
+        static const Eigen::Matrix3d Tn2e = (Eigen::Matrix3d() <<
+            0, 1, 0,
+            1, 0, 0,
+            0, 0, -1).finished();
+
+        x.block<3, 1>(4, 0) = Tn2e * x.block<3, 1>(4, 0);  // position
+        x.block<3, 1>(7, 0) = Tn2e * x.block<3, 1>(7, 0);  // velocity
+
+        Eigen::Quaterniond att_ned;
+        att_ned.w() = x(10);
+        att_ned.x() = x(11);
+        att_ned.y() = x(12);
+        att_ned.z() = x(13);
+        Eigen::Quaterniond att_enu(Quat2DCM(att_ned) * Tn2e);
+        att_enu.normalize();
+        x(10) = att_enu.w();
+        x(11) = att_enu.x();
+        x(12) = att_enu.y();
+        x(13) = att_enu.z();
+    }
 
     auto message = autorccar_interfaces::msg::NavState();
     message.timestamp.sec = (int)x(0);
