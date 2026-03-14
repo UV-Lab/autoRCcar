@@ -7,11 +7,6 @@
 #include "rclcpp/rclcpp.hpp"
 
 EKFWrapper::EKFWrapper(EKF* pEKF) : Node("ins_gps"), mpEKF(pEKF) {
-    // // time initialization (-> moved to ImuCallback)
-    // rclcpp::Time now = this->now();
-    // mpEKF->SetTimeInit(now.seconds());
-    // RCLCPP_INFO(this->get_logger(), "sec %lf nsec %ld", now.seconds(), now.nanoseconds());
-
     imu_subscriber = this->create_subscription<autorccar_interfaces::msg::Imu>(
         "IMU", 10, std::bind(&EKFWrapper::ImuCallback, this, std::placeholders::_1));
     gps_subscriber = this->create_subscription<autorccar_interfaces::msg::Gnss>(
@@ -22,13 +17,10 @@ EKFWrapper::EKFWrapper(EKF* pEKF) : Node("ins_gps"), mpEKF(pEKF) {
 }
 
 void EKFWrapper::ImuCallback(const autorccar_interfaces::msg::Imu& msg) {
-    double imu_time = msg.timestamp.sec + msg.timestamp.nanosec*1e-9;
-    Eigen::Vector3d acc = Eigen::Vector3d(msg.linear_acceleration.x, msg.linear_acceleration.y, msg.linear_acceleration.z); 
+    double imu_time = msg.timestamp.sec + msg.timestamp.nanosec * 1e-9;
+    Eigen::Vector3d acc =
+        Eigen::Vector3d(msg.linear_acceleration.x, msg.linear_acceleration.y, msg.linear_acceleration.z);
     Eigen::Vector3d gyro = Eigen::Vector3d(msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z);
-    // double imu_time = msg.timestamp.sec + msg.timestamp.nanosec * 1e-9;
-    // Eigen::Vector3d acc =
-    //     Eigen::Vector3d(msg.linear_acceleration.y, msg.linear_acceleration.x, -msg.linear_acceleration.z);
-    // Eigen::Vector3d gyro = Eigen::Vector3d(msg.angular_velocity.y, msg.angular_velocity.x, -msg.angular_velocity.z);
 
     // Set EKF start time
     if (!mpEKF->is_time_set) {
@@ -74,11 +66,7 @@ void EKFWrapper::PublishNavSol() {
     Eigen::Matrix<double, 20, 1> x = mpSol->GetNavRosMsg();
 
     if (mpEKF->GetNavFrame() == "ENU") {
-        static const Eigen::Matrix3d Tn2e = (Eigen::Matrix3d() <<
-            0, 1, 0,
-            1, 0, 0,
-            0, 0, -1).finished();
-
+        static const Eigen::Matrix3d Tn2e = (Eigen::Matrix3d() << 0, 1, 0, 1, 0, 0, 0, 0, -1).finished();
         x.block<3, 1>(4, 0) = Tn2e * x.block<3, 1>(4, 0);  // position
         x.block<3, 1>(7, 0) = Tn2e * x.block<3, 1>(7, 0);  // velocity
 

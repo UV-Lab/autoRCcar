@@ -93,7 +93,8 @@ void EKF::LoadSettings(const std::string& config) {
     R.block<3, 3>(0, 0) << Eigen::Matrix3d::Identity() * cfg["covR.pos"].as<double>();
     R.block<3, 3>(3, 3) << Eigen::Matrix3d::Identity() * cfg["covR.vel"].as<double>();
 
-    std::cout << "Set config file: " << config << std::endl;
+    std::cout << "Loaded config file: " << config << std::endl;
+    std::cout << "Output nav frame: " << nav_frame << std::endl;
 }
 
 void EKF::SetTimeInit(const double& time) {
@@ -101,7 +102,7 @@ void EKF::SetTimeInit(const double& time) {
     is_time_set = true;
 
     std::cout.precision(15);
-    std::cout << "EKF started at: " << time_init << " sec" << std::endl;
+    std::cout << "EKF start time: " << time_init << " sec" << std::endl;
 }
 
 void EKF::SetYawInit(const float& yaw) {
@@ -136,12 +137,12 @@ void EKF::Alignment() {
     Eigen::Vector3d bias_gyro;
 
     // Sum IMU data to estimate gyro bias and initial roll & pitch.
-    if ((imu_time_now - time_init) < alignment_time) {
-        alignment_cnt += 1;
-        sum_gyro = sum_gyro + imu_gyro;
-        sum_acc = sum_acc + imu_acc;
-        imu_flag = false;  // reset imu flag
+    alignment_cnt += 1;
+    sum_gyro = sum_gyro + imu_gyro;
+    sum_acc = sum_acc + imu_acc;
+    imu_flag = false;  // reset imu flag
 
+    if ((imu_time_now - time_init) < alignment_time) {
         return;
     }
 
@@ -172,20 +173,19 @@ void EKF::Alignment() {
     double lon = LLH.y();
 
     // ECEF to NED transformation
-    Ce2n << -sin(lat) * cos(lon),  -sin(lat) * sin(lon),  cos(lat),
-            -sin(lon),              cos(lon),             0,
-            -cos(lat) * cos(lon),  -cos(lat) * sin(lon), -sin(lat);
+    Ce2n << -sin(lat) * cos(lon), -sin(lat) * sin(lon), cos(lat), -sin(lon), cos(lon), 0, -cos(lat) * cos(lon),
+        -cos(lat) * sin(lon), -sin(lat);
 
     pos_ned = Ce2n * (gps_pos_ecef - pos_origin);
     vel_ned = Ce2n * gps_vel_ecef;
 
-    std::cout << "----- Alignment Finished-----" << std::endl;
+    std::cout << "Alignment completed" << std::endl;
     std::cout << "Initial position NED (m): " << pos_ned[0] << ", " << pos_ned[1] << ", " << pos_ned[2] << std::endl;
     std::cout << "Initial velocity NED (m/s): " << vel_ned[0] << ", " << vel_ned[1] << ", " << vel_ned[2] << std::endl;
     std::cout << "Initial Attitude (deg): " << att_eul[0] * 180 / M_PI << ", " << att_eul[1] * 180 / M_PI << ", "
               << att_eul[2] * 180 / M_PI << std::endl;
     std::cout << std::endl;
-    
+
     // Set Initial state
     nav_sol.SetNavSol(imu_time_now, pos_origin, pos_ned, vel_ned, att_quat, bias_acc, bias_gyro);
     nav_sol.SetImu(imu_acc, imu_gyro);
@@ -328,9 +328,8 @@ NavSol* EKF::Correct() {
     double lon = LLH.y();
 
     // ECEF to NED transformation
-    Ce2n << -sin(lat) * cos(lon),  -sin(lat) * sin(lon),  cos(lat),
-            -sin(lon),              cos(lon),             0,
-            -cos(lat) * cos(lon),  -cos(lat) * sin(lon), -sin(lat);
+    Ce2n << -sin(lat) * cos(lon), -sin(lat) * sin(lon), cos(lat), -sin(lon), cos(lon), 0, -cos(lat) * cos(lon),
+        -cos(lat) * sin(lon), -sin(lat);
 
     gps_pos_ned = Ce2n * (gps_pos_ecef - pos_origin);
     gps_vel_ned = Ce2n * (gps_vel_ecef);
@@ -377,7 +376,6 @@ void EKF::Run() {
                 Correct();
             }
         } else {
-            // if (imu_flag && gps_flag)
             if (imu_flag) {
                 Alignment();
             }
