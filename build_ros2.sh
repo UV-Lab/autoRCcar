@@ -9,5 +9,6 @@ else
 fi
 
 cd ros2
-colcon build
+colcon build --packages-select livox_ros_driver2
+colcon build --symlink-install --packages-skip livox_ros_driver2
 source install/setup.bash
