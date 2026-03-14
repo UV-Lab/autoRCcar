@@ -75,12 +75,10 @@ void EKFWrapper::PublishNavSol() {
         att_ned.x() = x(11);
         att_ned.y() = x(12);
         att_ned.z() = x(13);
-        Eigen::Quaterniond att_enu(Quat2DCM(att_ned) * Tn2e);
-        att_enu.normalize();
-        x(10) = att_enu.w();
-        x(11) = att_enu.x();
-        x(12) = att_enu.y();
-        x(13) = att_enu.z();
+        x(10) = att_ned.w();  // att_enu
+        x(11) = att_ned.y();
+        x(12) = att_ned.x();
+        x(13) = -att_ned.z();
     }
 
     auto message = autorccar_interfaces::msg::NavState();
