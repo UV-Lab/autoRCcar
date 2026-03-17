@@ -31,4 +31,17 @@ cmake .. && make -j
 sudo make install
 cd ../..
 
-./build_ros2.sh
+## e-consystem
+GSCAM_LINE='export GSCAM_CONFIG="v4l2src device=/dev/video0 io-mode=2 ! video/x-raw,width=1280,height=720,framerate=60/1,format=UYVY ! videoconvert"'
+
+# 중복 체크 후 추가 (grep으로 확인)
+if ! grep -qF "$GSCAM_LINE" ~/.bashrc; then
+    echo "Adding GSCAM_CONFIG to .bashrc..."
+    echo "$GSCAM_LINE" >> ~/.bashrc
+    # 현재 터미널 세션에도 바로 적용
+    eval "$GSCAM_LINE"
+else
+    echo "GSCAM_CONFIG already exists in .bashrc."
+fi
+
+##./build_ros2.sh
