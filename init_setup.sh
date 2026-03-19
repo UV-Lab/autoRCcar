@@ -11,11 +11,19 @@ sudo apt install -y ros-humble-perception-pcl \
 sudo add-apt-repository ppa:borglab/gtsam-release-4.1
 sudo apt install -y libgtsam-dev libgtsam-unstable-dev
 
+## e-con camera
+sudo apt install v4l-utils
+sudo apt install ros-humble-gscam
+
 ## oCam
 sudo apt-get install libv4l-dev libudev-dev
 
 ## GCS
 pip install numpy PyQt5 pyqtgraph
+
+## Gamepad (DualSens)
+sudo apt install joystick
+sudo apt install ros-humble-joy
 
 ## CostMap
 sudo apt-get install -y libeigen3-dev libyaml-cpp-dev \
