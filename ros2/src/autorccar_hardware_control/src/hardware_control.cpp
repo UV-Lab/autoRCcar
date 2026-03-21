@@ -1,8 +1,21 @@
 #include "hardware_control.h"
 
 #include <cmath>
+#include <cstdint>
 #include <fstream>
 #include <iostream>
+
+namespace {
+
+uint8_t AddCheckSum(const uint8_t* msg_tx, size_t msg_size) {
+    uint8_t checksum{0};
+    for (size_t i{2}; i < msg_size - 1; ++i) {  // Skip header bytes (0,1)
+        checksum += msg_tx[i];
+    }
+    return checksum;
+}
+
+}  // namespace
 
 namespace autorccar {
 namespace hardware_control {
@@ -22,11 +35,11 @@ HardwareControl::HardwareControl(const Parameters& parameters) : parameters_(par
 
 void HardwareControl::SetDriveCommand(const DriveCommand& drive_command) { drive_command_ = drive_command; }
 
-bool HardwareControl::GotStartCommand() const { return drive_command_ == DriveCommand::kStart; }
+bool HardwareControl::GotStopCommand() const { return drive_command_ == DriveCommand::kStop; }
 
 ControlCommand HardwareControl::SendControlCommand(ControlCommand& control_command) {
-    if (!GotStartCommand()) {
-        std::cout << "Have not received start command yet." << std::endl;
+    if (GotStopCommand()) {
+        std::cout << "Received stop command." << std::endl;
         SendStopMessage();
         return {};
     }
@@ -91,16 +104,17 @@ Pwm HardwareControl::ConvertCommandToPwm(const ControlCommand& control_command) 
 int HardwareControl::SerializeAndSendMessage(const Pwm& pwm) const {
     if (parameters_.use_dummy_hardware) return -1;
 
-    char msg_tx[8];
+    uint8_t msg_tx[9];
 
-    msg_tx[0] = static_cast<char>(0xFF);  // header
-    msg_tx[1] = static_cast<char>(0xFE);  // header
+    msg_tx[0] = static_cast<uint8_t>(0xFF);  // header
+    msg_tx[1] = static_cast<uint8_t>(0xFE);  // header
     msg_tx[2] = (pwm.steering >> 8) & 0xFF;
     msg_tx[3] = pwm.steering & 0xFF;
     msg_tx[4] = (pwm.speed >> 8) & 0xFF;
     msg_tx[5] = pwm.speed & 0xFF;
     msg_tx[6] = (static_cast<int>(drive_command_) >> 8) & 0xFF;
     msg_tx[7] = static_cast<int>(drive_command_) & 0xFF;
+    msg_tx[8] = AddCheckSum(msg_tx, sizeof(msg_tx));
     return write(file_descriptor_, msg_tx, sizeof(msg_tx));
 }
 

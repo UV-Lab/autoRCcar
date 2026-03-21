@@ -21,7 +21,7 @@ constexpr int kSteerPwmMin{10};  // 0 (margin 10)
 constexpr int kSteerPwmN{90};
 constexpr int kSteerPwmMax{170};  // 180 (margin 10)
 
-enum class DriveCommand { kStop = 0, kStart };
+enum class DriveCommand { kStop = 0, kAuto, kManual };
 
 struct ControlCommand {
     double speed{0.0};
@@ -56,7 +56,7 @@ class HardwareControl {
     ControlCommand SendControlCommand(ControlCommand& control_command);
 
    private:
-    bool GotStartCommand() const;
+    bool GotStopCommand() const;
     int SerialInitialize(const std::string serial_port_name, const int serial_baudrate);
     Pwm ConvertCommandToPwm(const ControlCommand& control_command) const;
     int SerializeAndSendMessage(const Pwm& pwm) const;
