@@ -5,8 +5,6 @@
 #include <sensor_msgs/msg/joy.hpp>
 #include "autorccar_interfaces/msg/control_command.hpp"
 #include <std_msgs/msg/int8.hpp>
-//#include <string>
-
 
 class GamepadControlNode : public rclcpp::Node
 {
