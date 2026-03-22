@@ -27,3 +27,4 @@ gamepad_control_node:
     # -- Deadzone ------------------------------------------------------
     # If |axes value| < deadzone, it is treated as 0.0
     deadzone: 0.05
+    
