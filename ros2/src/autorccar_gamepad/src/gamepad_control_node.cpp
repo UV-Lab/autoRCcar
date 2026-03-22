@@ -21,7 +21,7 @@ GamepadControlNode::GamepadControlNode()
   this->declare_parameter<double>     ("steer_scale",      1.0);
   this->declare_parameter<double>     ("deadzone",         0.05);
 
-  // ── 파라미터 읽기 ────────────────────────────────────────────────
+  // ── Read Parameter ────────────────────────────────────────────────
   const auto joy_topic   = this->get_parameter("joy_topic").as_string();
   const auto teleop_control_command_topic = this->get_parameter("teleop_control_command_topic").as_string();
   const auto teleop_command_topic = this->get_parameter("teleop_command_topic").as_string();
@@ -51,10 +51,10 @@ GamepadControlNode::GamepadControlNode()
 
   RCLCPP_INFO(this->get_logger(),
     "\n"
-    "  [joy_vehicle_control] 노드 시작\n"
-    "  Joy          구독 : %s\n"
-    "  Accel/Steer  발행 : %s  (accel : axes[%d] × %.2f | axes[%d] × %.2f)\n"
-    "  Control Mode 발행 : %s [%d], [%d], [%d], [%d]\n"
+    "  [joy_vehicle_control] Node Start\n"
+    "  Joy          Subscribe : %s\n"
+    "  Accel/Steer  Publish : %s  (accel : axes[%d] × %.2f | axes[%d] × %.2f)\n"
+    "  Control Mode Publish : %s [%d], [%d], [%d], [%d]\n"
     "  Reset      : [%d], [%d]\n"
     "  Deadzone   : ±%.3f",
     joy_topic.c_str(),
@@ -67,24 +67,24 @@ GamepadControlNode::GamepadControlNode()
 
 void GamepadControlNode::joyCallback(const sensor_msgs::msg::Joy::SharedPtr msg)
 {
-  // ── axes 인덱스 범위 검사 ────────────────────────────────────────
+  // -- Check axes index range ---------------------------------------
   const int axes_size = static_cast<int>(msg->axes.size());
 
   if (accel_axis_ >= axes_size) {
     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
-      "accel_axis_index(%d) >= axes 크기(%d). 파라미터를 확인하세요.",
+      "accel_axis_index(%d) >= axes size(%d). Please check the parameters.",
       accel_axis_, axes_size);
     return;
   }
 
   if (steer_axis_ >= axes_size) {
     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
-      "steer_axis_index(%d) >= axes 크기(%d). 파라미터를 확인하세요.",
+      "steer_axis_index(%d) >= axes size(%d). Please check the parameters.",
       steer_axis_, axes_size);
     return;
   }
 
-  // ── 원시값 읽기 ──────────────────────────────────────────────────
+  // -- Read raw values ----------------------------------------------
   const double raw_accel = static_cast<double>(msg->axes[accel_axis_]);
   const double raw_steer = static_cast<double>(msg->axes[steer_axis_]);
 
@@ -96,11 +96,11 @@ void GamepadControlNode::joyCallback(const sensor_msgs::msg::Joy::SharedPtr msg)
   const int raw_reset = static_cast<int>(msg->buttons[reset_axis_]);
   const int raw_reset2 = static_cast<int>(msg->buttons[reset2_axis_]);
 
-  // ── 데드존 + 스케일 적용 ─────────────────────────────────────────
+  // -- Apply deadzone and scaling -----------------------------------
   double accel_val = (std::fabs(raw_accel) > deadzone_) ? raw_accel * accel_scale_ : 0.0;
   double steer_val = (std::fabs(raw_steer) > deadzone_) ? raw_steer * steer_scale_ : 0.0;
 
-  // ── 발행 ─────────────────────────────────────────────────────────
+  // -- Publish ------------------------------------------------------
   autorccar_interfaces::msg::ControlCommand control_msg;
   std_msgs::msg::Int8 mode_msg;
 

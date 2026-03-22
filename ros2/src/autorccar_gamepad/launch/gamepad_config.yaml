@@ -1,29 +1,29 @@
 gamepad_control_node:
   ros__parameters:
 
-    # ── 토픽명 ────────────────────────────────────────────────────────
-    joy_topic: "/joy"    # 구독할 Joy 토픽
+    # -- Topic Names ---------------------------------------------------
+    joy_topic: "/joy"    # Joy topic to subscribe to
     teleop_control_command_topic: "/teleop/control_command"
     teleop_command_topic: "/teleop/command"
-    #accel_topic: "/accel"  # 발행할 가감속 토픽
-    #steer_topic: "/steer"  # 발행할 스티어링 토픽
+    #accel_topic: "/accel"  # Acceleration topic to publish
+    #steer_topic: "/steer"  # Steering topic to publish
 
-    # ── axes 인덱스 매핑 ──────────────────────────────────────────────
-    # DualSense 조이스틱 (CFI-ZCT1G 기준) :
-    accel_axis_index: 3   # 왼쪽 하단 버튼 → 가감속
-    steer_axis_index: 2   # 오른쪽 스틱 좌우 → 스티어링
-    stop_index : 0 # 네모
-    manual_index : 1 # 엑스
-    auto_index : 2 # 동그라미
-    tbd_index : 3 # 세모
-    reset_index : 4 # 하단 좌버튼
-    reset2_index : 5 # 하단 우버튼
+    # -- Axes Index Mapping --------------------------------------------
+    # DualSense Joystick (Based on CFI-ZCT1G):
+    accel_axis_index: 3   # Left Trigger (L2) -> Acceleration/Deceleration
+    steer_axis_index: 2   # Right Stick Horizontal -> Steering
+    stop_index : 0        # Square button
+    manual_index : 1      # Cross button (X)
+    auto_index : 2        # Circle button
+    tbd_index : 3         # Triangle button
+    reset_index : 4       # L1 Shoulder button
+    reset2_index : 5      # R1 Shoulder button
 
-    # ── 스케일 ────────────────────────────────────────────────────────
-    # 발행값 = axes 원값 × scale  (원값 범위: -1.0 ~ 1.0)
+    # -- Scale ---------------------------------------------------------
+    # Published Value = Raw Axes Value × Scale (Raw Range: -1.0 ~ 1.0)
     accel_scale: 1.0
     steer_scale: 1.0
 
-    # ── 데드존 ────────────────────────────────────────────────────────
-    # |axes 값| < deadzone 이면 0.0 으로 처리
+    # -- Deadzone ------------------------------------------------------
+    # If |axes value| < deadzone, it is treated as 0.0
     deadzone: 0.05
