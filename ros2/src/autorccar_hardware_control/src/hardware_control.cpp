@@ -16,6 +16,8 @@ uint8_t AddCheckSum(const uint8_t* msg_tx, size_t msg_size) {
     return checksum;
 }
 
+double RadToDeg(double radians) { return radians * 180.0 / M_PI; }
+
 }  // namespace
 
 namespace autorccar {
@@ -60,9 +62,8 @@ ControlCommand HardwareControl::SendControlCommand(ControlCommand& control_comma
 }
 
 Pwm HardwareControl::ConvertCommandToPwm(const ControlCommand& control_command) const {
-    return {static_cast<int>(206.0306 * control_command.speed -
-                             40.6541 * control_command.speed * control_command.speed + 5138.7189),
-            static_cast<int>((-1.5) * control_command.steering_angle * (180.0 / M_PI)) + kSteerPwmN};
+    return {static_cast<int>(kEscPwmSpeedGain * control_command.speed + kEscPwmN),
+            static_cast<int>(kSteerPwmGain * RadToDeg(control_command.steering_angle)) + kSteerPwmN};
 }
 
 int HardwareControl::SerializeAndSendMessage(DriveCommand cmd, const Pwm& pwm) const {
@@ -84,7 +85,7 @@ int HardwareControl::SerializeAndSendMessage(DriveCommand cmd, const Pwm& pwm) c
 }
 
 void HardwareControl::SendStopMessage() const {
-    Pwm pwm{static_cast<int>(5138.7189), kSteerPwmN};
+    Pwm pwm{kEscPwmN, kSteerPwmN};
     SerializeAndSendMessage(drive_command_, pwm);
 }
 

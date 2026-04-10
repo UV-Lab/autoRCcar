@@ -11,11 +11,14 @@ namespace autorccar {
 namespace hardware_control {
 
 constexpr int kEscPwmMin{3277};
-constexpr int kEscPwmN{4915};
+constexpr int kEscPwmN{5039};
 constexpr int kEscPwmMax{6553};
-constexpr int kSteerPwmMin{10};  // 0 (margin 10)
-constexpr int kSteerPwmN{90};
+constexpr int kSteerPwmMin{10};   // 0 (margin 10)
+constexpr int kSteerPwmN{87};     // Actual 90
 constexpr int kSteerPwmMax{170};  // 180 (margin 10)
+
+constexpr double kEscPwmSpeedGain{192.25};  // PWM per (m/s)
+constexpr double kSteerPwmGain{3.18};       // PWM per degree
 
 enum class DriveCommand { kStop = 0, kAuto, kManual };
 
