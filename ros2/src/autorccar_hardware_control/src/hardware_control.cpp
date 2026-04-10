@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <memory>
 
 namespace {
 
@@ -29,7 +30,7 @@ HardwareControl::HardwareControl(const Parameters& parameters) : parameters_(par
     std::cout << "use_dummy_hardware: " << parameters_.use_dummy_hardware << std::endl;
 
     if (!parameters_.use_dummy_hardware) {
-        file_descriptor_ = SerialInitialize(parameters_.serial_port_name, parameters_.serial_baudrate);
+        serial_ = std::make_unique<SerialPort>(parameters_.serial_port_name, parameters_.serial_baudrate);
     }
 }
 
@@ -53,46 +54,9 @@ ControlCommand HardwareControl::SendControlCommand(ControlCommand& control_comma
     control_pwm.speed = std::clamp(control_pwm.speed, kEscPwmMin, kEscPwmMax);
     control_pwm.steering = std::clamp(control_pwm.steering, kSteerPwmMin, kSteerPwmMax);
 
-    SerializeAndSendMessage(control_pwm);
+    SerializeAndSendMessage(drive_command_, control_pwm);
 
     return control_command;
-}
-
-int HardwareControl::SerialInitialize(const std::string serial_port_name, const int serial_baudrate) {
-    int fd = open(serial_port_name.c_str(), O_RDWR | O_NOCTTY);
-    struct termios toptions;
-
-    /* get current serial port settings */
-    tcgetattr(fd, &toptions);
-
-    /* set baud both ways */
-    if (auto it = baudrate_map.find(serial_baudrate); it != baudrate_map.end()) {
-        cfsetispeed(&toptions, it->second);
-    } else {
-        std::cout << "The baudrate - " << serial_baudrate << " is not supported." << std::endl;
-        std::abort();
-    }
-
-    /* 8 bits, no parity, no stop bits */
-    toptions.c_cflag &= ~PARENB;
-    toptions.c_cflag &= ~CSTOPB;
-    toptions.c_cflag &= ~CSIZE;
-    toptions.c_cflag |= CS8;
-
-    /* Canonical mode */
-    toptions.c_lflag |= ICANON;
-
-    /* commit the serial port settings */
-    tcsetattr(fd, TCSANOW, &toptions);
-
-    if (fd > 0) {
-        std::cout << "[" << serial_port_name << "]" << " opened as " << fd << "." << std::endl;
-    } else {
-        std::cout << "Error " << errno << " from open: " << strerror(errno) << "." << std::endl;
-        std::abort();
-    }
-
-    return fd;
 }
 
 Pwm HardwareControl::ConvertCommandToPwm(const ControlCommand& control_command) const {
@@ -101,26 +65,27 @@ Pwm HardwareControl::ConvertCommandToPwm(const ControlCommand& control_command) 
             static_cast<int>((-1.5) * control_command.steering_angle * (180.0 / M_PI)) + kSteerPwmN};
 }
 
-int HardwareControl::SerializeAndSendMessage(const Pwm& pwm) const {
-    if (parameters_.use_dummy_hardware) return -1;
+int HardwareControl::SerializeAndSendMessage(DriveCommand cmd, const Pwm& pwm) const {
+    if (!serial_) {
+        return -1;
+    }
 
     uint8_t msg_tx[9];
-
     msg_tx[0] = static_cast<uint8_t>(0xFF);  // header
     msg_tx[1] = static_cast<uint8_t>(0xFE);  // header
     msg_tx[2] = (pwm.steering >> 8) & 0xFF;
     msg_tx[3] = pwm.steering & 0xFF;
     msg_tx[4] = (pwm.speed >> 8) & 0xFF;
     msg_tx[5] = pwm.speed & 0xFF;
-    msg_tx[6] = (static_cast<int>(drive_command_) >> 8) & 0xFF;
-    msg_tx[7] = static_cast<int>(drive_command_) & 0xFF;
+    msg_tx[6] = (static_cast<int>(cmd) >> 8) & 0xFF;
+    msg_tx[7] = static_cast<int>(cmd) & 0xFF;
     msg_tx[8] = AddCheckSum(msg_tx, sizeof(msg_tx));
-    return write(file_descriptor_, msg_tx, sizeof(msg_tx));
+    return serial_->Write(msg_tx, sizeof(msg_tx));
 }
 
 void HardwareControl::SendStopMessage() const {
     Pwm pwm{static_cast<int>(5138.7189), kSteerPwmN};
-    SerializeAndSendMessage(pwm);
+    SerializeAndSendMessage(drive_command_, pwm);
 }
 
 }  // namespace hardware_control

@@ -20,6 +20,7 @@ include_directories(
 add_executable(hardware_control_node
   src/hardware_control_node.cpp
   src/hardware_control.cpp
+  src/serial_port.cpp
 )
 
 ament_target_dependencies(hardware_control_node

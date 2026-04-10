@@ -1,15 +1,11 @@
 #ifndef AUTOCAR_HARDWARE_CONTROL_HARDWARE_CONTROL_H_
 #define AUTOCAR_HARDWARE_CONTROL_HARDWARE_CONTROL_H_
 
-#include <errno.h>
-#include <sys/fcntl.h>
-#include <termios.h>
-#include <unistd.h>
-
-#include <map>
+#include <memory>
 
 #include "autorccar_interfaces/msg/control_command.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "serial_port.h"
 
 namespace autorccar {
 namespace hardware_control {
@@ -33,8 +29,6 @@ struct Pwm {
     int steering{0};
 };
 
-const std::map<int, speed_t> baudrate_map = {{57600, B57600}, {115200, B115200}, {230400, B230400}, {460800, B460800}};
-
 struct Parameters {
     double max_speed{0.0};
     double max_steering_angle{0.0};
@@ -57,13 +51,12 @@ class HardwareControl {
 
    private:
     bool GotStopCommand() const;
-    int SerialInitialize(const std::string serial_port_name, const int serial_baudrate);
     Pwm ConvertCommandToPwm(const ControlCommand& control_command) const;
-    int SerializeAndSendMessage(const Pwm& pwm) const;
+    int SerializeAndSendMessage(DriveCommand cmd, const Pwm& pwm) const;
     void SendStopMessage() const;
 
     Parameters parameters_;
-    int file_descriptor_;
+    std::unique_ptr<SerialPort> serial_;
     DriveCommand drive_command_{DriveCommand::kStop};
 };
 
