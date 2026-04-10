@@ -34,9 +34,13 @@ class GcsController:
         self.ros_node = ros_node
         self.gui = gui
         self.ros_node.nav_status_callback_fn = self.on_nav_status_received
+        self.ros_node.teleop_mode_callback_fn = self.on_teleop_mode_received
 
     def on_nav_status_received(self, msg):
         self.gui.update_nav_status_signal.emit(msg)
+
+    def on_teleop_mode_received(self, msg):
+        self.gui.update_teleop_mode_signal.emit(msg)
 
     def send_command(self, cmd):
         self.ros_node.publish_command(cmd)

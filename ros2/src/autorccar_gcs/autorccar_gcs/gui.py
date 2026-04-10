@@ -11,13 +11,22 @@ from .submodules.user_geometry import *
 from .submodules.cubic_spline import *
 
 
+def get_common_font(size=12, bold=True):
+    font = QFont()
+    font.setPointSize(size)
+    font.setBold(bold)
+    return font
+
+
 class GcsGui(QMainWindow):
     update_nav_status_signal = pyqtSignal(object)
+    update_teleop_mode_signal = pyqtSignal(object)
 
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
         self.update_nav_status_signal.connect(self.update_nav_status)
+        self.update_teleop_mode_signal.connect(self.update_teleop_mode)
         self.setWindowTitle("GCS")
         self.window_width, self.window_height = 1028, 720
         self.setMinimumSize(self.window_width, self.window_height)
@@ -46,14 +55,10 @@ class GcsGui(QMainWindow):
             self.position_graph_mouse_clicked_callback
         )
 
-        labelfont_1 = QLabel().font()
-        labelfont_1.setPointSize(12)
-        labelfont_1.setBold(True)
-
         grid_main_1 = QGridLayout()
 
         grid1_lab = QLabel("Graph")
-        grid1_lab.setFont(labelfont_1)
+        grid1_lab.setFont(get_common_font())
         grid1_lab.setAlignment(Qt.AlignCenter)
         grid_main_1.addWidget(self.position_graph, 0, 0)
         grid_main_1.addWidget(QProgressBar(self), 1, 0)
@@ -65,7 +70,7 @@ class GcsGui(QMainWindow):
         grid_main_2 = QGridLayout()
 
         grid2_lab = QLabel("Nav")
-        grid2_lab.setFont(labelfont_1)
+        grid2_lab.setFont(get_common_font())
         grid2_lab.setAlignment(Qt.AlignCenter)
 
         grid_main_2_1 = QGridLayout()
@@ -75,12 +80,18 @@ class GcsGui(QMainWindow):
         grid_main_2_1.addLayout(self.layout_vel, 1, 0, alignment=Qt.AlignTop)
         grid_main_2_1.addLayout(self.layout_att, 2, 0, alignment=Qt.AlignTop)
 
+        self.teleop_mode_label = QLabel("AUTO MODE")
+        self.teleop_mode_label.setFont(get_common_font())
+        self.teleop_mode_label.setAlignment(Qt.AlignCenter)
+        self.teleop_mode_label.setStyleSheet(
+            "background-color: green; color: white; padding: 4px;"
+        )
         btn_clear = QPushButton("Clear All", self)
         btn_import_path = QPushButton("Import Path", self)
         btn_export_path = QPushButton("Export Path", self)
         btn_send_path = QPushButton("Send Path", self)
         btn_set_yaw = QPushButton("Set Yaw", self)
-        btn_start = QPushButton("Start", self)
+        self.btn_start = QPushButton("Start", self)
         btn_stop = QPushButton("Stop", self)
 
         btn_clear.clicked.connect(self.clear_all)
@@ -88,15 +99,16 @@ class GcsGui(QMainWindow):
         btn_export_path.clicked.connect(self.export_path)
         btn_send_path.clicked.connect(self.send_path)
         btn_set_yaw.clicked.connect(self.send_set_yaw)
-        btn_start.clicked.connect(self.send_start_command)
+        self.btn_start.clicked.connect(self.send_start_command)
         btn_stop.clicked.connect(self.send_stop_command)
 
+        grid_main_2_2.addWidget(self.teleop_mode_label, 0, 0)
         grid_main_2_2.addWidget(btn_clear, 1, 0)
         grid_main_2_2.addWidget(btn_import_path, 2, 0)
         grid_main_2_2.addWidget(btn_export_path, 3, 0)
         grid_main_2_2.addWidget(btn_send_path, 4, 0)
         grid_main_2_2.addWidget(btn_set_yaw, 5, 0)
-        grid_main_2_2.addWidget(btn_start, 6, 0)
+        grid_main_2_2.addWidget(self.btn_start, 6, 0)
         grid_main_2_2.addWidget(btn_stop, 7, 0)
 
         grid_main_2.addLayout(grid_main_2_1, 0, 0)
@@ -323,6 +335,20 @@ class GcsGui(QMainWindow):
         self.layout_att.itemAt(4).widget().setText(str(pitch))
         self.layout_att.itemAt(6).widget().setText(str(yaw))
         self.update_graph_with_current_position(pos_e, pos_n)
+
+    def update_teleop_mode(self, msg):
+        if msg.data:
+            self.teleop_mode_label.setText("TELEOP MODE")
+            self.teleop_mode_label.setStyleSheet(
+                "background-color: orange; color: white; padding: 4px;"
+            )
+            self.btn_start.setEnabled(False)
+        else:
+            self.teleop_mode_label.setText("AUTO MODE")
+            self.teleop_mode_label.setStyleSheet(
+                "background-color: green; color: white; padding: 4px;"
+            )
+            self.btn_start.setEnabled(True)
 
     def update_graph_with_current_position(self, pos_e, pos_n):
         self.pos_traj_e.append(pos_e)
