@@ -1,136 +1,30 @@
-import sys, io, json, os
-from tracemalloc import start
-import rclpy
-from rclpy.node import Node
+import os
+import math
 
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
-from threading import Thread
 import pyqtgraph as pg
-from pyqtgraph.Qt import QtCore, QtWidgets, QtGui
-from std_msgs.msg import Int8, Float32
-from autorccar_interfaces.msg import NavState, Path, PathPoint
-import array
-import numpy as np
-import math
-import copy
+from pyqtgraph.Qt import QtCore, QtWidgets
+
 from .submodules.user_geometry import *
 from .submodules.cubic_spline import *
 
-forceQuit = False
-start_coord = [0, 0]
-goal_coord = [0, 0]
-flagNavUpdate = False
-posE, posN, posU, velE, velN, velU = 0, 0, 0, 0, 0, 0
-Roll, Pitch, Yaw = 0, 0, 0
-oriLat, oriLon, oriHei = 37.540022, 127.076111, 0
-i = 0
-path_ned = []
 
-flagPathPosUpdate = False
+class GcsGui(QMainWindow):
+    update_nav_status_signal = pyqtSignal(object)
 
-
-class Ros2Node(Node):
-    def __init__(self, node_name):
-        super().__init__(node_name)
-
-        self.publisher_command = self.create_publisher(Int8, "gcs/command", 10)
-        self.publisher_setyaw = self.create_publisher(Float32, "setyaw_topic", 10)
-        self.publisher_global_path = self.create_publisher(Path, "gcs/global_path", 10)
-        self.subscription_nav = self.create_subscription(
-            NavState, "nav_topic", self.NavSubCallback, 10
-        )
-
-    def PublishCommand(self, command):
-        msg = Int8()
-        msg.data = command
-        self.get_logger().info('pub-command: "%d"' % msg.data)
-        self.publisher_command.publish(msg)
-
-    def PublishSetYaw(self, yaw):
-        msg = Float32()
-        msg.data = yaw
-        self.get_logger().info('pub-setYaw: "%lf"' % msg.data)
-        self.publisher_setyaw.publish(msg)
-
-    def PublishGlobalPath(self, path_list):
-        msg = Path()
-        for point in path_list:
-            msg.path_points.append(PathPoint(x=point[0], y=point[1], speed=0.0))
-        self.publisher_global_path.publish(msg)
-
-    def NavSubCallback(self, msg):
-        global posE, posN, posU, velN, velE, velU
-        global Roll, Pitch, Yaw
-        global oriLat, oriLon, oriHei
-        global flagNavUpdate
-
-        posE = msg.position.x
-        posN = msg.position.y
-        posU = msg.position.z
-
-        velE = msg.velocity.x
-        velN = msg.velocity.y
-        velU = msg.velocity.z
-
-        qx = msg.quaternion.x
-        qy = msg.quaternion.y
-        qz = msg.quaternion.z
-        qw = msg.quaternion.w
-
-        eulr = quat2eulr([qw, qx, qy, qz])
-
-        Roll = eulr[0] * 180 / math.pi
-        Pitch = eulr[1] * 180 / math.pi
-        Yaw = eulr[2] * 180 / math.pi
-
-        # llh_tmp = xyz2llh([msg.origin.x, msg.origin.y, msg.origin.z])
-
-        # oriLat = llh_tmp[0] * 180 / math.pi
-        # oriLon = llh_tmp[1] * 180 / math.pi
-        # oriHei = llh_tmp[2]
-
-        flagNavUpdate = True
-
-
-def WindowStyle(app):
-    app.setStyle("Fusion")
-    palette = QPalette()
-    palette.setColor(QPalette.Window, QColor(53, 53, 53))
-    palette.setColor(QPalette.WindowText, Qt.white)
-    palette.setColor(QPalette.Base, QColor(25, 25, 25))
-    palette.setColor(QPalette.AlternateBase, QColor(53, 53, 53))
-    palette.setColor(QPalette.ToolTipBase, Qt.white)
-    palette.setColor(QPalette.ToolTipText, Qt.white)
-    palette.setColor(QPalette.Text, Qt.white)
-    palette.setColor(QPalette.Button, QColor(53, 53, 53))
-    palette.setColor(QPalette.ButtonText, Qt.white)
-    palette.setColor(QPalette.BrightText, Qt.red)
-    palette.setColor(QPalette.Link, QColor(42, 130, 218))
-    palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
-    palette.setColor(QPalette.HighlightedText, Qt.black)
-    app.setPalette(palette)
-
-
-class GCSWindow(QMainWindow):
-    def __init__(self, ros2_node):
+    def __init__(self, controller):
         super().__init__()
+        self.controller = controller
+        self.update_nav_status_signal.connect(self.update_nav_status)
         self.setWindowTitle("GCS")
         self.window_width, self.window_height = 1028, 720
         self.setMinimumSize(self.window_width, self.window_height)
-        self.initUI()
-        self.ResetParameters()
+        self.init_ui()
+        self.reset_parameters()
 
-        self.ros2_node = ros2_node
-        self.ros2_thread = Thread(target=rclpy.spin, args=(self.ros2_node,))
-        self.ros2_thread.start()
-
-        self.timer_0 = QTimer(self)
-        self.timer_0.start(100)  # [ms]
-        self.timer_0.timeout.connect(self.DataUpdateCheck)
-
-    def initUI(self):
+    def init_ui(self):
         tabs = QTabWidget()
         tab1 = QWidget()
         tab2 = QWidget()
@@ -146,10 +40,10 @@ class GCSWindow(QMainWindow):
 
         tab1.setLayout(grid_main)
 
-        self.position_graph = self.SetWidgetPositionGraph()
+        self.position_graph = self.set_widget_position_graph()
         self.position_graph.plotItem.setMenuEnabled(False)
         self.position_graph.scene().sigMouseClicked.connect(
-            self.PositionGraphMouseClicedCallback
+            self.position_graph_mouse_clicked_callback
         )
 
         labelfont_1 = QLabel().font()
@@ -164,9 +58,9 @@ class GCSWindow(QMainWindow):
         grid_main_1.addWidget(self.position_graph, 0, 0)
         grid_main_1.addWidget(QProgressBar(self), 1, 0)
 
-        self.layout_pos = self.SetNavVlayout("Pos", ["E", "N", "U"])
-        self.layout_vel = self.SetNavVlayout("Vel", ["E", "N", "U"])
-        self.layout_att = self.SetNavVlayout("Att", ["Roll", "Pitch", "Yaw"])
+        self.layout_pos = self.set_nav_vlayout("Pos", ["E", "N", "U"])
+        self.layout_vel = self.set_nav_vlayout("Vel", ["E", "N", "U"])
+        self.layout_att = self.set_nav_vlayout("Att", ["Roll", "Pitch", "Yaw"])
 
         grid_main_2 = QGridLayout()
 
@@ -186,27 +80,24 @@ class GCSWindow(QMainWindow):
         btn_export_path = QPushButton("Export Path", self)
         btn_send_path = QPushButton("Send Path", self)
         btn_set_yaw = QPushButton("Set Yaw", self)
-        btn_manual = QPushButton("Manual", self)
         btn_start = QPushButton("Start", self)
         btn_stop = QPushButton("Stop", self)
 
-        btn_clear.clicked.connect(self.BtnClearAllCallback)
-        btn_import_path.clicked.connect(self.ImportPathCallback)
-        btn_export_path.clicked.connect(self.ExportPathCallback)
-        btn_send_path.clicked.connect(self.BtnSendPathCallback)
-        btn_set_yaw.clicked.connect(self.BtnSetYawCallback)
-        btn_manual.clicked.connect(self.BtnManualCallback)
-        btn_start.clicked.connect(self.BtnStartCallback)
-        btn_stop.clicked.connect(self.BtnStopCallback)
+        btn_clear.clicked.connect(self.clear_all)
+        btn_import_path.clicked.connect(self.import_path)
+        btn_export_path.clicked.connect(self.export_path)
+        btn_send_path.clicked.connect(self.send_path)
+        btn_set_yaw.clicked.connect(self.send_set_yaw)
+        btn_start.clicked.connect(self.send_start_command)
+        btn_stop.clicked.connect(self.send_stop_command)
 
         grid_main_2_2.addWidget(btn_clear, 1, 0)
         grid_main_2_2.addWidget(btn_import_path, 2, 0)
         grid_main_2_2.addWidget(btn_export_path, 3, 0)
         grid_main_2_2.addWidget(btn_send_path, 4, 0)
         grid_main_2_2.addWidget(btn_set_yaw, 5, 0)
-        grid_main_2_2.addWidget(btn_manual, 6, 0)
-        grid_main_2_2.addWidget(btn_start, 7, 0)
-        grid_main_2_2.addWidget(btn_stop, 8, 0)
+        grid_main_2_2.addWidget(btn_start, 6, 0)
+        grid_main_2_2.addWidget(btn_stop, 7, 0)
 
         grid_main_2.addLayout(grid_main_2_1, 0, 0)
         grid_main_2.addLayout(grid_main_2_2, 1, 0)
@@ -220,7 +111,7 @@ class GCSWindow(QMainWindow):
         grid_main.setColumnStretch(0, 7)
         grid_main.setColumnStretch(1, 3)
 
-    def ResetParameters(self):
+    def reset_parameters(self):
         self.origin_filename_ = "test.txt"
         self.plot_points_ = []
         self.x_points_ = []
@@ -243,7 +134,7 @@ class GCSWindow(QMainWindow):
             pen=pg.mkPen(width=2, color="y"), name="pos"
         )
 
-    def SetWidgetPositionGraph(self):
+    def set_widget_position_graph(self):
         graph = pg.PlotWidget()
 
         graph.setTitle("Position")
@@ -256,7 +147,7 @@ class GCSWindow(QMainWindow):
 
         return graph
 
-    def SetNavVlayout(self, title, str):
+    def set_nav_vlayout(self, title, str):
         titlefont = QLabel().font()
         titlefont.setBold(True)
 
@@ -274,7 +165,7 @@ class GCSWindow(QMainWindow):
 
         return layout
 
-    def PositionGraphMouseClicedCallback(self, evt):
+    def position_graph_mouse_clicked_callback(self, evt):
         vb = self.position_graph.plotItem.vb
         scene_coords = evt.scenePos()
         if self.position_graph.sceneBoundingRect().contains(scene_coords):
@@ -295,9 +186,9 @@ class GCSWindow(QMainWindow):
                     self.x_points_[close_point_idx] = mouse_point.x()
                     self.y_points_[close_point_idx] = mouse_point.y()
                     self.is_point_moving_ = False
-                    self.UpdatePath()
+                    self.update_path()
                 else:
-                    close_point_idx = self.IsClosePoint(mouse_point)
+                    close_point_idx = self.is_close_point(mouse_point)
                     if close_point_idx != []:
                         self.position_graph.removeItem(
                             self.plot_points_[close_point_idx]
@@ -326,16 +217,16 @@ class GCSWindow(QMainWindow):
                         )
                         self.plot_points_.append(plot_point)
                         self.num_points_ += 1
-                        self.UpdatePath()
+                        self.update_path()
             elif evt.button() == 2:
                 self.position_graph.removeItem(self.plot_points_[-1])
                 del self.plot_points_[-1]
                 del self.x_points_[-1]
                 del self.y_points_[-1]
                 self.num_points_ -= 1
-                self.UpdatePath()
+                self.update_path()
 
-    def UpdatePath(self):
+    def update_path(self):
         if self.num_points_ > 1:
             [
                 self.res_x_points_,
@@ -354,7 +245,7 @@ class GCSWindow(QMainWindow):
             self.pos_traj_e = []
             self.pos_traj_n = []
 
-    def IsClosePoint(self, mouse_point):
+    def is_close_point(self, mouse_point):
         for idx in range(self.num_points_):
             d = math.sqrt(
                 (mouse_point.x() - self.x_points_[idx]) ** 2
@@ -364,24 +255,24 @@ class GCSWindow(QMainWindow):
                 return idx
         return []
 
-    def ClearPlotPoints(self):
+    def clear_plot_points(self):
         self.plot_points_ = []
         self.position_graph.clear()
 
-    def BtnClearAllCallback(self):
-        self.ClearPlotPoints()
-        self.ResetParameters()
+    def clear_all(self):
+        self.clear_plot_points()
+        self.reset_parameters()
         self.position_graph.setRange(rect=None, xRange=(-10, 10), yRange=(-10, 10))
 
-    def BtnSendPathCallback(self):
+    def send_path(self):
         path_list = []
         for idx in range(len(self.x_points_)):
             path_list.append([self.x_points_[idx], self.y_points_[idx]])
 
         print("send path")
-        self.ros2_node.PublishGlobalPath(path_list)
+        self.controller.send_global_path(path_list)
 
-    def BtnSetYawCallback(self):
+    def send_set_yaw(self):
         val, ok = QInputDialog.getDouble(
             self, "Set Yaw", "Enter the yaw angle relative to true north:"
         )
@@ -392,57 +283,61 @@ class GCSWindow(QMainWindow):
             while yaw <= -180:
                 yaw = yaw + 360
             print("set yaw")
-            self.ros2_node.PublishSetYaw(yaw)
+            self.controller.send_set_yaw(yaw)
 
-    def BtnManualCallback(self):
-        print("manual")
-        self.ros2_node.PublishCommand(2)
-
-    def BtnStartCallback(self):
+    def send_start_command(self):
         print("start")
-        self.ros2_node.PublishCommand(1)
+        self.controller.send_command(1)
 
-    def BtnStopCallback(self):
+    def send_stop_command(self):
         print("stop")
-        self.ros2_node.PublishCommand(0)
+        self.controller.send_command(0)
 
-    def DataUpdateCheck(self):
-        global flagNavUpdate, posE, posN, posU, velE, velN, velU
-        global Roll, Pitch, Yaw
-        global oriLat, oriLon, oriHei
+    def update_nav_status(self, msg):
+        pos_e = msg.position.x
+        pos_n = msg.position.y
+        pos_u = msg.position.z
 
-        if flagNavUpdate:
-            self.layout_pos.itemAt(2).widget().setText(str(posE))
-            self.layout_pos.itemAt(4).widget().setText(str(posN))
-            self.layout_pos.itemAt(6).widget().setText(str(posU))
+        vel_e = msg.velocity.x
+        vel_n = msg.velocity.y
+        vel_u = msg.velocity.z
 
-            self.layout_vel.itemAt(2).widget().setText(str(velE))
-            self.layout_vel.itemAt(4).widget().setText(str(velN))
-            self.layout_vel.itemAt(6).widget().setText(str(velU))
+        qx = msg.quaternion.x
+        qy = msg.quaternion.y
+        qz = msg.quaternion.z
+        qw = msg.quaternion.w
 
-            self.layout_att.itemAt(2).widget().setText(str(Roll))
-            self.layout_att.itemAt(4).widget().setText(str(Pitch))
-            self.layout_att.itemAt(6).widget().setText(str(Yaw))
+        eulr = quat2eulr([qw, qx, qy, qz])
 
-            self.UpdateGraphWithCurrentPos()
+        roll = eulr[0] * 180 / math.pi
+        pitch = eulr[1] * 180 / math.pi
+        yaw = eulr[2] * 180 / math.pi
 
-            flagNavUpdate = False
+        self.layout_pos.itemAt(2).widget().setText(str(pos_e))
+        self.layout_pos.itemAt(4).widget().setText(str(pos_n))
+        self.layout_pos.itemAt(6).widget().setText(str(pos_u))
+        self.layout_vel.itemAt(2).widget().setText(str(vel_e))
+        self.layout_vel.itemAt(4).widget().setText(str(vel_n))
+        self.layout_vel.itemAt(6).widget().setText(str(vel_u))
+        self.layout_att.itemAt(2).widget().setText(str(roll))
+        self.layout_att.itemAt(4).widget().setText(str(pitch))
+        self.layout_att.itemAt(6).widget().setText(str(yaw))
+        self.update_graph_with_current_position(pos_e, pos_n)
 
-    def UpdateGraphWithCurrentPos(self):
-        global posE, posN
-        self.pos_traj_e.append(posE)
-        self.pos_traj_n.append(posN)
-        self.plot_current_pos.setData(x=[posE], y=[posN])
+    def update_graph_with_current_position(self, pos_e, pos_n):
+        self.pos_traj_e.append(pos_e)
+        self.pos_traj_n.append(pos_n)
+        self.plot_current_pos.setData(x=[pos_e], y=[pos_n])
         self.plot_pos_traj.setData(x=self.pos_traj_e, y=self.pos_traj_n)
 
-    def ImportPathCallback(self):
+    def import_path(self):
         filename = QtWidgets.QFileDialog.getOpenFileName(self, "Import Path File")
         self.origin_filename_ = filename[0]
         with open(self.origin_filename_, "r") as f:
             lines = f.readlines()
             self.x_points_ = []
             self.y_points_ = []
-            self.ClearPlotPoints()
+            self.clear_plot_points()
             for line in lines:
                 line.strip()
                 splited = line.split()
@@ -473,10 +368,10 @@ class GCSWindow(QMainWindow):
                 x_range = (x_cen - y_half_range, x_cen + y_half_range)
                 y_range = (y_cen - y_half_range, y_cen + y_half_range)
             self.position_graph.setRange(rect=None, xRange=x_range, yRange=y_range)
-        self.UpdatePath()
+        self.update_path()
         print("path is imported")
 
-    def ExportPathCallback(self):
+    def export_path(self):
         filename = QtWidgets.QFileDialog.getSaveFileName(
             self,
             "Export Path File",
@@ -491,31 +386,3 @@ class GCSWindow(QMainWindow):
         with open(filename_text, "w") as file:
             file.writelines(" ".join(str(j) for j in i) + "\n" for i in export_list)
         print("points are exported")
-
-    def closeEvent(self, event):
-        print("Close window")
-        rclpy.shutdown()
-        self.ros2_thread.join()
-        global forceQuit
-        forceQuit = True
-
-
-def main(args=None):
-    app = QtWidgets.QApplication(sys.argv)
-    WindowStyle(app)
-
-    rclpy.init(args=args)
-
-    node = Ros2Node("pyqt_gcs")
-
-    gcsapp = GCSWindow(node)
-    gcsapp.show()
-
-    try:
-        app.exec_()  # 이벤트 루프 시작
-    except forceQuit:
-        app.quit()
-
-
-if __name__ == "__main__":
-    main()
