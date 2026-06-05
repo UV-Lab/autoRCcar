@@ -40,7 +40,7 @@ void HardwareControl::SetDriveCommand(const DriveCommand& drive_command) { drive
 
 bool HardwareControl::GotStopCommand() const { return drive_command_ == DriveCommand::kStop; }
 
-ControlCommand HardwareControl::SendControlCommand(ControlCommand& control_command) {
+ControlResult HardwareControl::SendControlCommand(ControlCommand& control_command) {
     if (GotStopCommand()) {
         std::cout << "Received stop command." << std::endl;
         SendStopMessage();
@@ -58,7 +58,7 @@ ControlCommand HardwareControl::SendControlCommand(ControlCommand& control_comma
 
     SerializeAndSendMessage(drive_command_, control_pwm);
 
-    return control_command;
+    return {control_command, control_pwm};
 }
 
 Pwm HardwareControl::ConvertCommandToPwm(const ControlCommand& control_command) const {
