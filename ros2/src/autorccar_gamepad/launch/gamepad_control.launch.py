@@ -6,29 +6,25 @@ import os
 
 def generate_launch_description():
     config = os.path.join(
-        get_package_share_directory('joy_vehicle_control'),
+        get_package_share_directory('autorccar_gamepad'),
         'launch',
-        'joy_config.yaml'
+        'gamepad_config.yaml'
     )
 
     joy_node = Node(
         package='joy',
         executable='joy_node',
         name='joy_node',
+        parameters=[{'autorepeat_rate': 10.0}],
         output='screen',
-        parameters=[{'autorepeat_rate': 20.0}],
     )
 
-    joy_vehicle_control_node = Node(
+    gamepad_control_node = Node(
         package='autorccar_gamepad',
-        executable='joy_vehicle_control_node',
-        name='joy_vehicle_control_node',
-        output='screen',
+        executable='gamepad_control_node',
+        name='gamepad_control_node',
         parameters=[config],
+        output='screen',
     )
 
-    return LaunchDescription([
-        joy_node,
-        joy_vehicle_control_node,
-    ])
-    
+    return LaunchDescription([joy_node, gamepad_control_node])
