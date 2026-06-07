@@ -17,8 +17,8 @@ constexpr int kSteerPwmMin{10};   // 0 (margin 10)
 constexpr int kSteerPwmN{87};     // Actual 90
 constexpr int kSteerPwmMax{170};  // 180 (margin 10)
 
-constexpr double kEscPwmSpeedGain{192.25};  // PWM per (m/s)
-constexpr double kSteerPwmGain{3.18};       // PWM per degree
+constexpr double kEscPwmSpeedGain{319.76};  // PWM per (m/s)
+constexpr double kSteerPwmGain{4.30};       // PWM per degree
 
 enum class DriveCommand { kStop = 0, kAuto, kManual };
 

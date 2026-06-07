@@ -10,8 +10,11 @@ Run `build_ros2.sh` for the first build. It correctly builds the Livox package.
 
 
 ## Launch
+#### RC Car
 ```bash
 ros2 launch ocam_publisher ocam.launch.py
+
+ros2 run gscam gscam_node
 
 ros2 launch livox_ros_driver2 msg_MID360_launch.py
 
@@ -22,7 +25,13 @@ ros2 launch autorccar_planning_control planning_control.launch.py
 ros2 launch autorccar_hardware_control hardware_control.launch.py 
 
 ros2 launch autorccar_costmap costmap.launch.py
+```
 
-cd ros2/src/autorccar_gcs/autorccar_gcs
-python pyqt_gcs_with_pyqtgraph.py
+#### Ground
+```bash
+ros2 launch autorccar_gcs autorccar_gcs.launch.py
+
+ros2 launch autorccar_keyboard autorccar_keboard.launch.py
+
+ros2 run autorccar_gamepad gamepad_control_node
 ```

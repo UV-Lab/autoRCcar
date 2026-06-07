@@ -11,7 +11,7 @@ def generate_launch_description():
         package="autorccar_gcs",
         executable="autorccar_gcs",
         name="autorccar_gcs",
-        parameters=[],
+        additional_env={"PYTHONUNBUFFERED": "1"},
         output="screen",
     )
     ld = LaunchDescription()

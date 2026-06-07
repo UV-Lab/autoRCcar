@@ -3,6 +3,7 @@
 #include "autorccar_interfaces/msg/control_command.hpp"
 #include "hardware_control.h"
 #include "rclcpp/rclcpp.hpp"
+#include "std_msgs/msg/bool.hpp"
 #include "std_msgs/msg/int8.hpp"
 
 namespace {
@@ -19,6 +20,12 @@ autorccar_interfaces::msg::ControlCommand ToMsg2(const autorccar::hardware_contr
     autorccar_interfaces::msg::ControlCommand msg;
     msg.speed = Pwm.speed;
     msg.steering_angle = Pwm.steering;
+    return msg;
+}
+
+std_msgs::msg::Bool ToMsg(bool data) {
+    std_msgs::msg::Bool msg;
+    msg.data = data;
     return msg;
 }
 
@@ -39,6 +46,10 @@ class HardwareControlNode : public rclcpp::Node {
 
         hardware_pwm_command_publisher_ = create_publisher<autorccar_interfaces::msg::ControlCommand>(
             "hardware_control/pwm_command", rclcpp::SystemDefaultsQoS());
+      
+        teleop_mode_publisher_ =
+            create_publisher<std_msgs::msg::Bool>("hardware_control/teleop_mode", rclcpp::QoS(1).transient_local());
+        teleop_mode_publisher_->publish(ToMsg(is_teleop_mode_));
 
         // subscriber
         rclcpp::SubscriptionOptions control_command_subscription_options;
@@ -162,6 +173,7 @@ class HardwareControlNode : public rclcpp::Node {
                 std::cout << "Teleop: Undefined command received. Stopping." << std::endl;
                 break;
         }
+        teleop_mode_publisher_->publish(ToMsg(is_teleop_mode_));
     }
 
     std::unique_ptr<autorccar::hardware_control::HardwareControl> hardware_controller_;
@@ -170,6 +182,7 @@ class HardwareControlNode : public rclcpp::Node {
     // publisher
     rclcpp::Publisher<autorccar_interfaces::msg::ControlCommand>::SharedPtr hardware_control_command_publisher_;
     rclcpp::Publisher<autorccar_interfaces::msg::ControlCommand>::SharedPtr hardware_pwm_command_publisher_;
+    rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr teleop_mode_publisher_;
 
     // subscriber
     rclcpp::Subscription<autorccar_interfaces::msg::ControlCommand>::SharedPtr control_command_subscriber_;
