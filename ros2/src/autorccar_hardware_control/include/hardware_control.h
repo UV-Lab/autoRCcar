@@ -32,6 +32,11 @@ struct Pwm {
     int steering{0};
 };
 
+struct ControlResult {
+    ControlCommand command;
+    Pwm pwm;
+};
+
 struct Parameters {
     double max_speed{0.0};
     double max_steering_angle{0.0};
@@ -50,7 +55,7 @@ class HardwareControl {
     explicit HardwareControl(const Parameters& parameters);
 
     void SetDriveCommand(const DriveCommand& drive_command);
-    ControlCommand SendControlCommand(ControlCommand& control_command);
+    ControlResult SendControlCommand(ControlCommand& control_command);
 
    private:
     bool GotStopCommand() const;

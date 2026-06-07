@@ -16,6 +16,12 @@ autorccar_interfaces::msg::ControlCommand ToMsg(const autorccar::hardware_contro
     msg.steering_angle = control_command.steering_angle;
     return msg;
 }
+autorccar_interfaces::msg::ControlCommand ToMsg2(const autorccar::hardware_control::Pwm& Pwm) {
+    autorccar_interfaces::msg::ControlCommand msg;
+    msg.speed = Pwm.speed;
+    msg.steering_angle = Pwm.steering;
+    return msg;
+}
 
 std_msgs::msg::Bool ToMsg(bool data) {
     std_msgs::msg::Bool msg;
@@ -38,6 +44,9 @@ class HardwareControlNode : public rclcpp::Node {
         hardware_control_command_publisher_ = create_publisher<autorccar_interfaces::msg::ControlCommand>(
             "hardware_control/control_command", rclcpp::SystemDefaultsQoS());
 
+        hardware_pwm_command_publisher_ = create_publisher<autorccar_interfaces::msg::ControlCommand>(
+            "hardware_control/pwm_command", rclcpp::SystemDefaultsQoS());
+      
         teleop_mode_publisher_ =
             create_publisher<std_msgs::msg::Bool>("hardware_control/teleop_mode", rclcpp::QoS(1).transient_local());
         teleop_mode_publisher_->publish(ToMsg(is_teleop_mode_));
@@ -52,8 +61,9 @@ class HardwareControlNode : public rclcpp::Node {
                 autorccar::hardware_control::ControlCommand control_command;
                 control_command.speed = 0.0;
                 control_command.steering_angle = 0.0;
-                hardware_control_command_publisher_->publish(
-                    ToMsg(hardware_controller_->SendControlCommand(control_command)));
+                auto result = hardware_controller_->SendControlCommand(control_command);
+                hardware_control_command_publisher_->publish(ToMsg(result.command));
+                hardware_pwm_command_publisher_->publish(ToMsg2(result.pwm));
                 hardware_controller_->SetDriveCommand(DriveCommand::kStop);
                 std::cout << "Control command deadline missed. RC car stopped. Send a Start command from GCS to resume."
                           << std::endl;
@@ -101,7 +111,9 @@ class HardwareControlNode : public rclcpp::Node {
         autorccar::hardware_control::ControlCommand control_command;
         control_command.speed = msg.speed;
         control_command.steering_angle = msg.steering_angle;
-        hardware_control_command_publisher_->publish(ToMsg(hardware_controller_->SendControlCommand(control_command)));
+        auto result = hardware_controller_->SendControlCommand(control_command);
+        hardware_control_command_publisher_->publish(ToMsg(result.command));
+        hardware_pwm_command_publisher_->publish(ToMsg2(result.pwm));
     }
 
     void TeleopControlCommandCallback(const autorccar_interfaces::msg::ControlCommand& msg) {
@@ -110,7 +122,9 @@ class HardwareControlNode : public rclcpp::Node {
         autorccar::hardware_control::ControlCommand control_command;
         control_command.speed = msg.speed;
         control_command.steering_angle = msg.steering_angle;
-        hardware_control_command_publisher_->publish(ToMsg(hardware_controller_->SendControlCommand(control_command)));
+        auto result = hardware_controller_->SendControlCommand(control_command);
+        hardware_control_command_publisher_->publish(ToMsg(result.command));
+        hardware_pwm_command_publisher_->publish(ToMsg2(result.pwm));
     }
 
     void GcsCommandCallback(const std_msgs::msg::Int8& msg) const {
@@ -167,6 +181,7 @@ class HardwareControlNode : public rclcpp::Node {
 
     // publisher
     rclcpp::Publisher<autorccar_interfaces::msg::ControlCommand>::SharedPtr hardware_control_command_publisher_;
+    rclcpp::Publisher<autorccar_interfaces::msg::ControlCommand>::SharedPtr hardware_pwm_command_publisher_;
     rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr teleop_mode_publisher_;
 
     // subscriber
