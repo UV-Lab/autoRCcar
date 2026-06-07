@@ -121,7 +121,7 @@ class HardwareControlNode : public rclcpp::Node {
                 break;
             case 1:
                 if (!is_teleop_mode_) {
-                    hardware_controller_->SetDriveCommand(DriveCommand::kStart);
+                    hardware_controller_->SetDriveCommand(DriveCommand::kAuto);
                     std::cout << "GCS: Started." << std::endl;
                 } else {
                     std::cout << "GCS: Start command ignored. Teleop mode ENABLED." << std::endl;
@@ -143,7 +143,7 @@ class HardwareControlNode : public rclcpp::Node {
                 break;
             case 1:
                 if (is_teleop_mode_) {
-                    hardware_controller_->SetDriveCommand(DriveCommand::kStart);
+                    hardware_controller_->SetDriveCommand(DriveCommand::kManual);
                     std::cout << "Teleop: Started in teleop mode." << std::endl;
                 } else {
                     std::cout << "Teleop: Start command ignored. Teleop mode is DISABLED." << std::endl;

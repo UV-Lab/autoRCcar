@@ -1,27 +1,26 @@
 #ifndef AUTOCAR_HARDWARE_CONTROL_HARDWARE_CONTROL_H_
 #define AUTOCAR_HARDWARE_CONTROL_HARDWARE_CONTROL_H_
 
-#include <errno.h>
-#include <sys/fcntl.h>
-#include <termios.h>
-#include <unistd.h>
-
-#include <map>
+#include <memory>
 
 #include "autorccar_interfaces/msg/control_command.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "serial_port.h"
 
 namespace autorccar {
 namespace hardware_control {
 
 constexpr int kEscPwmMin{3277};
-constexpr int kEscPwmN{4915};
+constexpr int kEscPwmN{5039};
 constexpr int kEscPwmMax{6553};
-constexpr int kSteerPwmMin{10};  // 0 (margin 10)
-constexpr int kSteerPwmN{90};
+constexpr int kSteerPwmMin{10};   // 0 (margin 10)
+constexpr int kSteerPwmN{87};     // Actual 90
 constexpr int kSteerPwmMax{170};  // 180 (margin 10)
 
-enum class DriveCommand { kStop = 0, kStart };
+constexpr double kEscPwmSpeedGain{319.76};  // PWM per (m/s)
+constexpr double kSteerPwmGain{4.30};       // PWM per degree
+
+enum class DriveCommand { kStop = 0, kAuto, kManual };
 
 struct ControlCommand {
     double speed{0.0};
@@ -32,8 +31,6 @@ struct Pwm {
     int speed{0};
     int steering{0};
 };
-
-const std::map<int, speed_t> baudrate_map = {{57600, B57600}, {115200, B115200}, {230400, B230400}, {460800, B460800}};
 
 struct Parameters {
     double max_speed{0.0};
@@ -56,14 +53,13 @@ class HardwareControl {
     ControlCommand SendControlCommand(ControlCommand& control_command);
 
    private:
-    bool GotStartCommand() const;
-    int SerialInitialize(const std::string serial_port_name, const int serial_baudrate);
+    bool GotStopCommand() const;
     Pwm ConvertCommandToPwm(const ControlCommand& control_command) const;
-    int SerializeAndSendMessage(const Pwm& pwm) const;
+    int SerializeAndSendMessage(DriveCommand cmd, const Pwm& pwm) const;
     void SendStopMessage() const;
 
     Parameters parameters_;
-    int file_descriptor_;
+    std::unique_ptr<SerialPort> serial_;
     DriveCommand drive_command_{DriveCommand::kStop};
 };
 
