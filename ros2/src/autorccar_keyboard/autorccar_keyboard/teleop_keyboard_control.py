@@ -29,7 +29,7 @@ z/c : minimum/maximum servo direction
 w/s : increase/decrease only linear speed by step size
 a/d : increase/decrease only angular speed by 1
 
-i/o/p : publish command_topic (i=Stop, o=Start, p=Manual)
+i/o/p : publish command_topic (i=Stop, o=Teleop, p=Auto)
 
 CTRL-C to quit
 """
@@ -72,9 +72,9 @@ def getKey(settings):
 
 
 def vels(speed, steering_angle):
-    return "currently:\tspeed %s\tsteering angle %s " % (
-        speed,
-        steering_angle * 180 / 3.141592,
+    return "currently:\tspeed %s\tsteering angle[deg] %s " % (
+        round(speed, 2),
+        round(steering_angle * 180 / 3.141592, 2),
     )
 
 
@@ -93,7 +93,7 @@ def main():
 
     speed = 0.0
     steering_angle = 0.0
-    step = 1.0
+    step = 0.1
     status = 0.0
 
     try:
@@ -113,7 +113,7 @@ def main():
                 if command.data == 0:
                     status_cm = "Stop"
                 elif command.data == 1:
-                    status_cm = "Manual"
+                    status_cm = "Teleop"
                 elif command.data == 2:
                     status_cm = "Auto"
                 print("[Publish] command_topic = %d (%s)" % (command.data, status_cm))
