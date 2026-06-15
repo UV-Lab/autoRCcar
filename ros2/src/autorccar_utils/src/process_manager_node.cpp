@@ -1,0 +1,437 @@
+// autorccar_util/src/process_manager_node.cpp
+//
+// 1) 프로세스 관리: GCS 명령(/util/process_command)으로 각 패키지/rosbag 실행·종료
+//    상태는 /util/process_status (JSON) 로 1Hz 발행
+// 2) 시스템 모니터링: CPU/메모리/디스크/온도를 /util/system_status (JSON) 로 1Hz 발행
+// 3) 전원 제어: /util/system_command 로 restart/shutdown 명령 수신 -> sudo reboot/shutdown
+//
+// Command  (std_msgs/String, JSON): {"name": "<id>", "action": "start"|"stop"}
+// Status   (std_msgs/String, JSON): {"<id>": "running"|"stopped", ...}
+// SystemCommand (std_msgs/String, JSON): {"action": "restart"|"shutdown"}
+// SystemStatus  (std_msgs/String, JSON):
+//   {"cpu_percent":.., "mem_percent":.., "mem_used_mb":.., "mem_total_mb":..,
+//    "disk_percent":.., "disk_used_gb":.., "disk_total_gb":.., "temp_celsius":..}
+
+#include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/string.hpp>
+
+#include <map>
+#include <string>
+#include <vector>
+#include <sstream>
+#include <iomanip>
+#include <fstream>
+#include <ctime>
+#include <cstdlib>
+
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <sys/statvfs.h>
+#include <signal.h>
+
+using std::string;
+using std::vector;
+using std::map;
+
+struct CpuTimes
+{
+  long user = 0, nice = 0, sys = 0, idle = 0;
+  long iowait = 0, irq = 0, softirq = 0, steal = 0;
+
+  long total() const
+  {
+    return user + nice + sys + idle + iowait + irq + softirq + steal;
+  }
+};
+
+class ProcessManagerNode : public rclcpp::Node
+{
+public:
+  ProcessManagerNode() : Node("autorccar_process_manager")
+  {
+    configs_["gscam"] = {"ros2", "run", "gscam", "gscam_node"};
+    configs_["livox"] = {"ros2", "launch", "livox_ros_driver2", "msg_MID360_launch.py"};
+    configs_["ublox"] = {"ros2", "run", "autorccar_ubloxf9r", "ubloxf9r"};
+    configs_["lio_sam"] = {"ros2", "launch", "lio_sam", "run.launch.py"};
+    configs_["ins_gnss"] = {"ros2", "launch", "autorccar_ins_gnss", "ins_gnss_nav.launch.py"};
+    configs_["planning_control"] = {"ros2", "launch", "autorccar_planning_control", "planning_control.launch.py"};
+    configs_["hardware_control"] = {"ros2", "launch", "autorccar_hardware_control", "hardware_control.launch.py"};
+    configs_["costmap"] = {"ros2", "launch", "autorccar_costmap", "costmap.launch.py"};
+    // "rosbag" 은 configs_ 에 넣지 않고 start 시점에 동적으로 명령 생성
+
+    // ── 프로세스 관리 ──────────────────────────────────────
+    process_cmd_sub_ = create_subscription<std_msgs::msg::String>(
+      "util/process_command", 10,
+      std::bind(&ProcessManagerNode::onProcessCommand, this, std::placeholders::_1));
+
+    process_status_pub_ = create_publisher<std_msgs::msg::String>("util/process_status", 10);
+
+    // ── 시스템 모니터링 / 전원 제어 ──────────────────────────
+    system_cmd_sub_ = create_subscription<std_msgs::msg::String>(
+      "util/system_command", 10,
+      std::bind(&ProcessManagerNode::onSystemCommand, this, std::placeholders::_1));
+
+    system_status_pub_ = create_publisher<std_msgs::msg::String>("util/system_status", 10);
+
+    // CPU 사용률 계산을 위한 초기값 확보
+    prev_cpu_ = readCpuTimes();
+
+    timer_ = create_wall_timer(
+      std::chrono::seconds(1),
+      std::bind(&ProcessManagerNode::onTimer, this));
+
+    RCLCPP_INFO(get_logger(), "process_manager_node started");
+  }
+
+  ~ProcessManagerNode() override
+  {
+    for (auto & kv : pids_) {
+      stopProcessByPid(kv.second);
+    }
+  }
+
+private:
+  // ═══════════════════════════════════════════════════════
+  // 1) 프로세스 관리
+  // ═══════════════════════════════════════════════════════
+
+  void onProcessCommand(const std_msgs::msg::String::SharedPtr msg)
+  {
+    string name, action;
+    if (!parseField(msg->data, "name", name) || !parseField(msg->data, "action", action)) {
+      RCLCPP_ERROR(get_logger(), "invalid process command: %s", msg->data.c_str());
+      return;
+    }
+
+    if (action == "start") {
+      startProcess(name);
+    } else if (action == "stop") {
+      stopProcess(name);
+    } else {
+      RCLCPP_WARN(get_logger(), "unknown action: %s", action.c_str());
+    }
+  }
+
+  void startProcess(const string & name)
+  {
+    reapFinished();
+
+    auto it = pids_.find(name);
+    if (it != pids_.end() && it->second > 0) {
+      RCLCPP_INFO(get_logger(), "[%s] already running", name.c_str());
+      return;
+    }
+
+    vector<string> argv_vec;
+    if (name == "rosbag") {
+      argv_vec = buildRosbagCommand();
+    } else if (configs_.count(name)) {
+      argv_vec = configs_[name];
+    } else {
+      RCLCPP_WARN(get_logger(), "unknown process id: %s", name.c_str());
+      return;
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+      RCLCPP_ERROR(get_logger(), "fork failed for %s", name.c_str());
+      return;
+    }
+
+    if (pid == 0) {
+      // ── 자식 프로세스 ──────────────────────────────────
+      setsid(); // 새 세션/프로세스 그룹의 리더가 됨
+
+      vector<char *> argv;
+      argv.reserve(argv_vec.size() + 1);
+      for (auto & a : argv_vec) argv.push_back(const_cast<char *>(a.c_str()));
+      argv.push_back(nullptr);
+
+      execvp(argv[0], argv.data());
+      _exit(127); // exec 실패
+    }
+
+    // ── 부모 프로세스 ────────────────────────────────────
+    pids_[name] = pid;
+
+    std::ostringstream cmdline;
+    for (auto & a : argv_vec) cmdline << a << " ";
+    RCLCPP_INFO(get_logger(), "[%s] started (pid=%d): %s",
+                name.c_str(), pid, cmdline.str().c_str());
+  }
+
+  void stopProcess(const string & name)
+  {
+    reapFinished();
+
+    auto it = pids_.find(name);
+    if (it == pids_.end() || it->second <= 0) {
+      RCLCPP_INFO(get_logger(), "[%s] not running", name.c_str());
+      return;
+    }
+
+    RCLCPP_INFO(get_logger(), "[%s] stop signal sent (pid=%d)",
+                name.c_str(), it->second);
+    stopProcessByPid(it->second);
+  }
+
+  void stopProcessByPid(pid_t pid)
+  {
+    if (pid > 0) {
+      // setsid()로 그룹 리더의 pid == 그룹 id 이므로
+      // killpg로 자식 프로세스(ros2 launch가 띄운 노드 포함)까지 모두 SIGINT
+      killpg(pid, SIGINT);
+    }
+  }
+
+  void reapFinished()
+  {
+    for (auto & kv : pids_) {
+      pid_t & pid = kv.second;
+      if (pid <= 0) continue;
+      int status;
+      pid_t res = waitpid(pid, &status, WNOHANG);
+      if (res == pid) {
+        pid = -1; // 종료됨
+      }
+    }
+  }
+
+  vector<string> buildRosbagCommand()
+  {
+    auto now = std::time(nullptr);
+    std::tm tm_buf;
+    localtime_r(&now, &tm_buf);
+
+    std::ostringstream name_oss;
+    name_oss << "rosbag2_" << std::put_time(&tm_buf, "%Y%m%d_%H%M%S");
+
+    const char * home_env = std::getenv("HOME");
+    string home = home_env ? home_env : "/tmp";
+    string outdir = home + "/bags/" + name_oss.str();
+
+    return {"ros2", "bag", "record", "-a", "-o", outdir};
+  }
+
+  void publishProcessStatus()
+  {
+    reapFinished();
+
+    std::ostringstream oss;
+    oss << "{";
+    bool first = true;
+
+    auto append_status = [&](const string & name) {
+      if (!first) oss << ",";
+      first = false;
+      auto it = pids_.find(name);
+      bool running = (it != pids_.end() && it->second > 0);
+      oss << "\"" << name << "\":\"" << (running ? "running" : "stopped") << "\"";
+    };
+
+    for (auto & kv : configs_) append_status(kv.first);
+    append_status("rosbag");
+
+    oss << "}";
+
+    std_msgs::msg::String msg;
+    msg.data = oss.str();
+    process_status_pub_->publish(msg);
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // 2) 시스템 모니터링
+  // ═══════════════════════════════════════════════════════
+
+  CpuTimes readCpuTimes()
+  {
+    CpuTimes t{};
+    std::ifstream file("/proc/stat");
+    if (!file.is_open()) return t;
+
+    string line;
+    std::getline(file, line); // 첫 줄: "cpu  user nice system idle iowait irq softirq steal ..."
+    std::istringstream iss(line);
+    string label;
+    iss >> label >> t.user >> t.nice >> t.sys >> t.idle
+        >> t.iowait >> t.irq >> t.softirq >> t.steal;
+    return t;
+  }
+
+  double computeCpuUsage()
+  {
+    CpuTimes cur = readCpuTimes();
+
+    long prev_idle = prev_cpu_.idle + prev_cpu_.iowait;
+    long cur_idle = cur.idle + cur.iowait;
+    long prev_total = prev_cpu_.total();
+    long cur_total = cur.total();
+
+    long total_diff = cur_total - prev_total;
+    long idle_diff = cur_idle - prev_idle;
+
+    double usage = 0.0;
+    if (total_diff > 0) {
+      usage = 100.0 * static_cast<double>(total_diff - idle_diff) / total_diff;
+    }
+    prev_cpu_ = cur;
+    return usage;
+  }
+
+  void readMemInfo(double & mem_percent, double & used_mb, double & total_mb)
+  {
+    mem_percent = used_mb = total_mb = 0.0;
+
+    std::ifstream file("/proc/meminfo");
+    if (!file.is_open()) return;
+
+    long mem_total_kb = 0, mem_available_kb = 0;
+    string line;
+    while (std::getline(file, line)) {
+      std::istringstream iss(line);
+      string key;
+      long value;
+      string unit;
+      iss >> key >> value >> unit;
+      if (key == "MemTotal:") mem_total_kb = value;
+      else if (key == "MemAvailable:") mem_available_kb = value;
+    }
+
+    total_mb = mem_total_kb / 1024.0;
+    used_mb = (mem_total_kb - mem_available_kb) / 1024.0;
+    if (mem_total_kb > 0) {
+      mem_percent = 100.0 * (mem_total_kb - mem_available_kb) / mem_total_kb;
+    }
+  }
+
+  void readDiskInfo(double & disk_percent, double & used_gb, double & total_gb)
+  {
+    disk_percent = used_gb = total_gb = 0.0;
+
+    struct statvfs st;
+    if (statvfs("/", &st) != 0) return;
+
+    const double GB = 1024.0 * 1024.0 * 1024.0;
+    unsigned long block_size = st.f_frsize;
+    double total = static_cast<double>(st.f_blocks) * block_size;
+    double free = static_cast<double>(st.f_bfree) * block_size;
+    double used = total - free;
+
+    total_gb = total / GB;
+    used_gb = used / GB;
+    if (total > 0) {
+      disk_percent = 100.0 * used / total;
+    }
+  }
+
+  double readTemperature()
+  {
+    // Jetson: /sys/class/thermal/thermal_zone0/temp (millidegree C)
+    std::ifstream file("/sys/class/thermal/thermal_zone0/temp");
+    if (!file.is_open()) return -1.0;
+
+    long milli_c = 0;
+    file >> milli_c;
+    return milli_c / 1000.0;
+  }
+
+  void publishSystemStatus()
+  {
+    double cpu = computeCpuUsage();
+
+    double mem_percent, mem_used_mb, mem_total_mb;
+    readMemInfo(mem_percent, mem_used_mb, mem_total_mb);
+
+    double disk_percent, disk_used_gb, disk_total_gb;
+    readDiskInfo(disk_percent, disk_used_gb, disk_total_gb);
+
+    double temp = readTemperature();
+
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(1);
+    oss << "{"
+        << "\"cpu_percent\":" << cpu << ","
+        << "\"mem_percent\":" << mem_percent << ","
+        << "\"mem_used_mb\":" << mem_used_mb << ","
+        << "\"mem_total_mb\":" << mem_total_mb << ","
+        << "\"disk_percent\":" << disk_percent << ","
+        << "\"disk_used_gb\":" << disk_used_gb << ","
+        << "\"disk_total_gb\":" << disk_total_gb << ","
+        << "\"temp_celsius\":" << temp
+        << "}";
+
+    std_msgs::msg::String msg;
+    msg.data = oss.str();
+    system_status_pub_->publish(msg);
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // 3) 전원 제어 (restart / shutdown)
+  // ═══════════════════════════════════════════════════════
+
+  void onSystemCommand(const std_msgs::msg::String::SharedPtr msg)
+  {
+    string action;
+    if (!parseField(msg->data, "action", action)) {
+      RCLCPP_ERROR(get_logger(), "invalid system command: %s", msg->data.c_str());
+      return;
+    }
+
+    if (action == "restart") {
+      RCLCPP_WARN(get_logger(), "REBOOT requested via GCS");
+      std::system("sudo reboot");
+    } else if (action == "shutdown") {
+      RCLCPP_WARN(get_logger(), "SHUTDOWN requested via GCS");
+      std::system("sudo shutdown -h now");
+    } else {
+      RCLCPP_WARN(get_logger(), "unknown system action: %s", action.c_str());
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // 공통
+  // ═══════════════════════════════════════════════════════
+
+  void onTimer()
+  {
+    publishProcessStatus();
+    publishSystemStatus();
+  }
+
+  // 매우 단순한 flat JSON {"key":"value",...} 에서 문자열 필드 추출
+  bool parseField(const string & json, const string & key, string & out)
+  {
+    string pattern = "\"" + key + "\"";
+    auto pos = json.find(pattern);
+    if (pos == string::npos) return false;
+    pos = json.find(':', pos);
+    if (pos == string::npos) return false;
+    pos = json.find('"', pos);
+    if (pos == string::npos) return false;
+    auto end = json.find('"', pos + 1);
+    if (end == string::npos) return false;
+    out = json.substr(pos + 1, end - pos - 1);
+    return true;
+  }
+
+  map<string, vector<string>> configs_;
+  map<string, pid_t> pids_;
+  CpuTimes prev_cpu_;
+
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr process_cmd_sub_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr process_status_pub_;
+
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr system_cmd_sub_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr system_status_pub_;
+
+  rclcpp::TimerBase::SharedPtr timer_;
+};
+
+int main(int argc, char ** argv)
+{
+  rclcpp::init(argc, argv);
+  rclcpp::spin(std::make_shared<ProcessManagerNode>());
+  rclcpp::shutdown();
+  return 0;
+}
