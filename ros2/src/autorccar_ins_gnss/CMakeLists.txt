@@ -22,21 +22,40 @@ link_directories(${Eigen3_INCLUDE_DIRS})
 
 
 add_executable(ins_gnss
-  src/main_ekf.cpp 
+  src/main_ekf.cpp
   src/ekf_ros_wrapper.cpp
   src/ekf.cpp
   src/ins_toolbox.cpp
 )
 ament_target_dependencies(ins_gnss
-  rclcpp 
-  std_msgs 
-  nav_msgs 
+  rclcpp
+  std_msgs
+  nav_msgs
   autorccar_interfaces
   Eigen3
 )
 target_link_libraries(ins_gnss
   yaml-cpp
 )
+
+add_executable(ins_gnss_fg
+  src/main_fg.cpp
+  src/ins_gnss_fg_ros.cpp
+  src/ins_gnss_fg.cpp
+  src/imu_preintegration.cpp
+  src/ins_toolbox.cpp
+)
+ament_target_dependencies(ins_gnss_fg
+  rclcpp
+  std_msgs
+  nav_msgs
+  autorccar_interfaces
+  Eigen3
+)
+target_link_libraries(ins_gnss_fg
+  yaml-cpp
+)
+
 install(
   DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}/
@@ -47,6 +66,7 @@ install(
 )
 install(TARGETS
   ins_gnss
+  ins_gnss_fg
   DESTINATION lib/${PROJECT_NAME}
 )
 

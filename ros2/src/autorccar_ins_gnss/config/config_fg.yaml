@@ -1,0 +1,21 @@
+---
+# ---- Common settings (shared with EKF node) ----
+navigation_frame: "ENU"      # Output frame: "NED" or "ENU"
+alignment_time_sec: 10.0     # Static alignment duration [s]
+initial_yaw_deg: 0.0         # Initial heading [deg]
+
+# ---- Factor graph specific settings ----
+fg.max_window_size: 5        # Number of keyframes kept in the sliding window
+
+# IMU noise (continuous-time standard deviations)
+fg.sigma_acc:      0.1       # Accelerometer noise [m/s^2 / sqrt(Hz)]
+fg.sigma_gyro:     0.01      # Gyroscope noise    [rad/s / sqrt(Hz)]
+
+# Bias random-walk noise (used as factor weight between consecutive keyframes)
+fg.sigma_ba_walk:  1.0e-4    # Acc-bias walk  [m/s^2 / s]
+fg.sigma_bg_walk:  1.0e-5    # Gyro-bias walk [rad/s / s]
+
+# GNSS measurement noise
+fg.sigma_gnss_pos: 1.0       # Position [m]
+fg.sigma_gnss_vel: 0.1       # Velocity [m/s]
+...

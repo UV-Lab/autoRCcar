@@ -1,0 +1,20 @@
+import os
+
+from ament_index_python import get_package_share_directory
+
+from launch import LaunchDescription
+from launch_ros.actions import Node
+
+
+def generate_launch_description():
+    share_dir = get_package_share_directory('autorccar_ins_gnss')
+    config_file = os.path.join(share_dir, 'config', 'config_fg.yaml')
+
+    return LaunchDescription([
+        Node(
+            package='autorccar_ins_gnss',
+            executable='ins_gnss_fg',
+            arguments=[config_file],
+            output='screen',
+        )
+    ])
