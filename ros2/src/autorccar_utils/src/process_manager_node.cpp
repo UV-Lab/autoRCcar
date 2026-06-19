@@ -149,7 +149,7 @@ private:
       argv.push_back(nullptr);
 
       execvp(argv[0], argv.data());
-      _exit(127); // exec 실패
+      _exit(127); // exec failed
     }
 
     // ── Parent process ────────────────────────────────────
