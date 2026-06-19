@@ -1,9 +1,9 @@
 // autorccar_util/src/process_manager_node.cpp
 //
-// 1) 프로세스 관리: GCS 명령(/util/process_command)으로 각 패키지/rosbag 실행·종료
-//    상태는 /util/process_status (JSON) 로 1Hz 발행
-// 2) 시스템 모니터링: CPU/메모리/디스크/온도를 /util/system_status (JSON) 로 1Hz 발행
-// 3) 전원 제어: /util/system_command 로 restart/shutdown 명령 수신 -> sudo reboot/shutdown
+// 1) Process management: start/stop each package/rosbag via GCS command (/util/process_command)
+//    Status is published as JSON on /util/process_status at 1Hz
+// 2) System monitoring: publish CPU/memory/disk/temperature as JSON on /util/system_status at 1Hz
+// 3) Power control: receive restart/shutdown commands on /util/system_command -> sudo reboot/shutdown
 //
 // Command  (std_msgs/String, JSON): {"name": "<id>", "action": "start"|"stop"}
 // Status   (std_msgs/String, JSON): {"<id>": "running"|"stopped", ...}
@@ -58,23 +58,23 @@ public:
     configs_["planning_control"] = {"ros2", "launch", "autorccar_planning_control", "planning_control.launch.py"};
     configs_["hardware_control"] = {"ros2", "launch", "autorccar_hardware_control", "hardware_control.launch.py"};
     configs_["costmap"] = {"ros2", "launch", "autorccar_costmap", "costmap.launch.py"};
-    // "rosbag" 은 configs_ 에 넣지 않고 start 시점에 동적으로 명령 생성
-
-    // ── 프로세스 관리 ──────────────────────────────────────
+    // "rosbag" is not put into configs_; its command is generated dynamically at start time
+ 
+    // ── Process management ──────────────────────────────────────
     process_cmd_sub_ = create_subscription<std_msgs::msg::String>(
       "util/process_command", 10,
       std::bind(&ProcessManagerNode::onProcessCommand, this, std::placeholders::_1));
 
     process_status_pub_ = create_publisher<std_msgs::msg::String>("util/process_status", 10);
 
-    // ── 시스템 모니터링 / 전원 제어 ──────────────────────────
+    // ── System monitoring / power control ──────────────────────────
     system_cmd_sub_ = create_subscription<std_msgs::msg::String>(
       "util/system_command", 10,
       std::bind(&ProcessManagerNode::onSystemCommand, this, std::placeholders::_1));
 
     system_status_pub_ = create_publisher<std_msgs::msg::String>("util/system_status", 10);
 
-    // CPU 사용률 계산을 위한 초기값 확보
+    // Capture an initial value for CPU usage calculation
     prev_cpu_ = readCpuTimes();
 
     timer_ = create_wall_timer(
@@ -93,9 +93,9 @@ public:
 
 private:
   // ═══════════════════════════════════════════════════════
-  // 1) 프로세스 관리
+  // 1) Process management
   // ═══════════════════════════════════════════════════════
-
+ 
   void onProcessCommand(const std_msgs::msg::String::SharedPtr msg)
   {
     string name, action;
@@ -140,8 +140,8 @@ private:
     }
 
     if (pid == 0) {
-      // ── 자식 프로세스 ──────────────────────────────────
-      setsid(); // 새 세션/프로세스 그룹의 리더가 됨
+      // ── Child process ──────────────────────────────────
+      setsid(); // Become the leader of a new session/process group
 
       vector<char *> argv;
       argv.reserve(argv_vec.size() + 1);
@@ -152,7 +152,7 @@ private:
       _exit(127); // exec 실패
     }
 
-    // ── 부모 프로세스 ────────────────────────────────────
+    // ── Parent process ────────────────────────────────────
     pids_[name] = pid;
 
     std::ostringstream cmdline;
@@ -179,8 +179,8 @@ private:
   void stopProcessByPid(pid_t pid)
   {
     if (pid > 0) {
-      // setsid()로 그룹 리더의 pid == 그룹 id 이므로
-      // killpg로 자식 프로세스(ros2 launch가 띄운 노드 포함)까지 모두 SIGINT
+      // Since setsid() makes the group leader's pid equal to the group id,
+      // killpg sends SIGINT to all child processes (including nodes launched by ros2 launch)
       killpg(pid, SIGINT);
     }
   }
@@ -241,7 +241,7 @@ private:
   }
 
   // ═══════════════════════════════════════════════════════
-  // 2) 시스템 모니터링
+  // 2) System monitoring
   // ═══════════════════════════════════════════════════════
 
   CpuTimes readCpuTimes()
@@ -251,7 +251,7 @@ private:
     if (!file.is_open()) return t;
 
     string line;
-    std::getline(file, line); // 첫 줄: "cpu  user nice system idle iowait irq softirq steal ..."
+    std::getline(file, line); // first line: "cpu  user nice system idle iowait irq softirq steal ..."
     std::istringstream iss(line);
     string label;
     iss >> label >> t.user >> t.nice >> t.sys >> t.idle
@@ -367,7 +367,7 @@ private:
   }
 
   // ═══════════════════════════════════════════════════════
-  // 3) 전원 제어 (restart / shutdown)
+  // 3) Power control (restart / shutdown)
   // ═══════════════════════════════════════════════════════
 
   void onSystemCommand(const std_msgs::msg::String::SharedPtr msg)
@@ -390,7 +390,7 @@ private:
   }
 
   // ═══════════════════════════════════════════════════════
-  // 공통
+  // Common
   // ═══════════════════════════════════════════════════════
 
   void onTimer()
@@ -399,7 +399,7 @@ private:
     publishSystemStatus();
   }
 
-  // 매우 단순한 flat JSON {"key":"value",...} 에서 문자열 필드 추출
+  // Extract a string field from a very simple flat JSON {"key":"value",...}
   bool parseField(const string & json, const string & key, string & out)
   {
     string pattern = "\"" + key + "\"";
