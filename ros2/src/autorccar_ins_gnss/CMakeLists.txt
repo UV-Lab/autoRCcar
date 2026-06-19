@@ -44,6 +44,7 @@ add_executable(ins_gnss_fg
   src/ins_gnss_fg.cpp
   src/imu_preintegration.cpp
   src/ins_toolbox.cpp
+  src/ekf.cpp
 )
 ament_target_dependencies(ins_gnss_fg
   rclcpp
