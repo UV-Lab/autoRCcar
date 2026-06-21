@@ -1,0 +1,46 @@
+name: autorccar_gcs
+description: AutoRCCar Ground Control Station - Flutter
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # 지도
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+
+  # ROS2 연동 (rosbridge WebSocket)
+  web_socket_channel: ^3.0.1
+
+  # 상태 관리
+  provider: ^6.1.2
+
+  # 아이콘
+  cupertino_icons: ^1.0.6
+
+  # 저장
+  shared_preferences: ^2.2.2
+
+  # 파일 저장
+  file_selector: ^1.0.3
+
+  # 오프라인 지도 (MBTiles)
+  sqflite_common_ffi: ^2.3.3
+  path_provider: ^2.1.3
+  http: ^1.2.2
+  sqlite3_flutter_libs: ^0.5.24
+  
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/map.mbtiles
