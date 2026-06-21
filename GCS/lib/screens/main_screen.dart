@@ -425,7 +425,6 @@ class _MainScreenState extends State<MainScreen> {
   Widget _mapModeButton(String label, MapMode mode, IconData icon) {
     final selected = _mapMode == mode;
     return SizedBox(
-      width: 127,
       height: 40,
       child: InkWell(
         onTap: () {
@@ -438,6 +437,7 @@ class _MainScreenState extends State<MainScreen> {
           setState(() => _mapMode = mode);
         },
         child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(
@@ -447,6 +447,7 @@ class _MainScreenState extends State<MainScreen> {
             ),
           ),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.start,
             children: [
               const SizedBox(width: 12),
