@@ -8,10 +8,10 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:latlong2/latlong.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
 
 class MbtilesService {
   Database? _db;
@@ -23,9 +23,6 @@ class MbtilesService {
   /// center coordinates derived from bounds (center of minlon,minlat,maxlon,maxlat)
   LatLng? centerLatLng;
 
-  /// path to the mbtiles file bundled in assets
-  static const String _assetPath = 'assets/map.mbtiles';
-
   /// filename for the local copy
   static const String _localFileName = 'map.mbtiles';
 
@@ -34,16 +31,15 @@ class MbtilesService {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
 
-      final dir = await getApplicationSupportDirectory();
-      final dbPath = '${dir.path}${Platform.pathSeparator}$_localFileName';
-      final file = File(dbPath);
+      // 실행파일 옆 map.mbtiles 만 사용
+      final exeDir = File(Platform.resolvedExecutable).parent.path;
+      final dbPath = '$exeDir${Platform.pathSeparator}$_localFileName';
 
-      if (!await file.exists()) {
-        final data = await rootBundle.load(_assetPath);
-        await file.writeAsBytes(
-          data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
-          flush: true,
-        );
+      if (!await File(dbPath).exists()) {
+        // 파일이 없으면 오프라인 지도 사용 불가 처리
+        _initFailed = true;
+        _db = null;
+        return;
       }
 
       _db = await databaseFactory.openDatabase(
@@ -53,7 +49,6 @@ class MbtilesService {
 
       await _loadMetadata();
     } catch (e) {
-      // mbtiles asset missing or load failed → offline map unavailable
       _initFailed = true;
       _db = null;
     }
