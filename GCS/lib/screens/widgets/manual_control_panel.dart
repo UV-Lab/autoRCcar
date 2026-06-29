@@ -251,7 +251,7 @@ class CarTopViewPainter extends CustomPainter {
     final carH = h * 0.75;
     final wheelW = carW * 0.22;
     final wheelH = carH * 0.22;
-    final steerDeg = (steeringAngle - 87) * (45.0 / 77.0); // neutral at 87, mapped to ±45°
+    final steerDeg = -(steeringAngle - 87) * (45.0 / 77.0); // neutral at 87, mapped to ±45°
     final steerRad = steerDeg * pi / 180.0;
 
     final bodyPaint = Paint()
