@@ -7,7 +7,6 @@ import 'screens/main_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
   final mbtiles = MbtilesService();
   await mbtiles.init();
 

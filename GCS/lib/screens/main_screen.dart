@@ -11,14 +11,12 @@ import 'widgets/manual_control_panel.dart';
 import '../map/hybrid_tile_provider.dart';
 import '../map/connectivity_service.dart';
 import '../map/mbtiles_service.dart';
-import 'widgets/occupancy_grid_view.dart';
 import 'widgets/enu_plot_view.dart';
 import 'widgets/run_panel.dart';
 import 'widgets/system_monitor_panel.dart';
 import 'widgets/llm_panel.dart';
-import 'widgets/camera_overlay_widget.dart';
 
-enum MapMode { osm, occupancyGrid, enuPlot }
+enum MapMode { osm, enuPlot }
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -31,7 +29,6 @@ class _MainScreenState extends State<MainScreen> {
   final MapController _mapController = MapController();
   bool _isSettingOrigin = false;
   double _currentZoom = 18.0;
-  bool _showCamera = true;
   late GcsController _ctrl;
 
   MapMode _mapMode = MapMode.osm;
@@ -44,13 +41,11 @@ class _MainScreenState extends State<MainScreen> {
       _ctrl.onOriginSet = (latLng) {
         _mapController.move(latLng, 18);
       };
-      _ctrl.enableCamera();
     });
   }
 
   @override
   void dispose() {
-    _ctrl.disableCamera();
     super.dispose();
   }
 
@@ -63,7 +58,7 @@ class _MainScreenState extends State<MainScreen> {
         appBar: _buildAppBar(ctrl),
         body: Row(
           children: [
-            // ── map / occupancy grid / chart + LLM panel area ───────────
+            // ── map / chart + LLM panel area ───────────
             Expanded(
               flex: 6,
               child: Column(
@@ -79,7 +74,6 @@ class _MainScreenState extends State<MainScreen> {
                             _buildMapOverlay(ctrl),
                           ],
                         ),
-                      MapMode.occupancyGrid => OccupancyGridView(ctrl: ctrl),
                       MapMode.enuPlot => EnuPlotView(ctrl: ctrl),
                     },
                   ),
@@ -415,7 +409,6 @@ class _MainScreenState extends State<MainScreen> {
       child: Row(
         children: [
           _mapModeButton('Map', MapMode.osm, Icons.map),
-          _mapModeButton('Occupancy Grid', MapMode.occupancyGrid, Icons.grid_on),
           _mapModeButton('ENU Plot', MapMode.enuPlot, Icons.scatter_plot),
         ],
       ),
@@ -427,15 +420,7 @@ class _MainScreenState extends State<MainScreen> {
     return SizedBox(
       height: 40,
       child: InkWell(
-        onTap: () {
-          final ctrl = context.read<GcsController>();
-          if (mode == MapMode.occupancyGrid && _mapMode != MapMode.occupancyGrid) {
-            ctrl.enableOccupancyGrid();
-          } else if (mode != MapMode.occupancyGrid && _mapMode == MapMode.occupancyGrid) {
-            ctrl.disableOccupancyGrid();
-          }
-          setState(() => _mapMode = mode);
-        },
+        onTap: () => setState(() => _mapMode = mode),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
@@ -473,7 +458,6 @@ class _MainScreenState extends State<MainScreen> {
 
   Widget _buildMapOverlay(GcsController ctrl) {
     final connectivity = context.watch<ConnectivityService>();
-    final isConnected = ctrl.connectionState == rb.ConnectionState.connected;
 
     return Stack(
       children: [
@@ -507,7 +491,7 @@ class _MainScreenState extends State<MainScreen> {
               ),
             ),
           ),
-        // bottom-left: camera video + text overlay
+        // bottom-left: text overlay
         Positioned(
           bottom: 16,
           left: 16,
@@ -515,18 +499,6 @@ class _MainScreenState extends State<MainScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // camera video (togglable)
-              if (_showCamera)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: CameraOverlayWidget(
-                    imageStream: ctrl.cameraStream,
-                    isConnected: isConnected,
-                    isCameraActive: ctrl.processStatus['gscam'] == 'running',
-                    onClose: () => setState(() => _showCamera = false),
-                  ),
-                ),
-              // text overlay
               if (_isSettingOrigin)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -574,27 +546,6 @@ class _MainScreenState extends State<MainScreen> {
             ],
           ),
         ),
-        // restore button when camera is hidden
-        if (!_showCamera)
-          Positioned(
-            bottom: 50,
-            left: 16,
-            child: Tooltip(
-              message: '카메라 영상 표시',
-              child: InkWell(
-                onTap: () => setState(() => _showCamera = true),
-                child: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.white24),
-                  ),
-                  child: const Icon(Icons.videocam, color: Colors.white54, size: 18),
-                ),
-              ),
-            ),
-          ),
         // bottom-right zoom display
         Positioned(
           bottom: 16,
