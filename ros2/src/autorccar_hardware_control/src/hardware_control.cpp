@@ -62,7 +62,7 @@ ControlResult HardwareControl::SendControlCommand(ControlCommand& control_comman
 }
 
 Pwm HardwareControl::ConvertCommandToPwm(const ControlCommand& control_command) const {
-    return {static_cast<int>(kEscPwmSpeedGain * control_command.speed^0.5337 + kEscPwmN),
+    return {static_cast<int>(kEscPwmSpeedGain * std::pow(control_command.speed, 0.5337) + kEscPwmN),
             static_cast<int>(kSteerPwmGain * RadToDeg(control_command.steering_angle)) + kSteerPwmN};
 }
 
