@@ -71,13 +71,6 @@ void EKFWrapper::PublishNavSol() {
         x.block<3, 1>(7, 0) = Tn2e * x.block<3, 1>(7, 0);  // velocity
 
         Eigen::Quaterniond att_ned;
-//        Eigen::Quaterniond att_enu;
-        
-////        att_enu = att_ned * Eigen::Quaterniond(Tn2e.transpose()); 
-//        Eigen::Quaterniond q_ned2enu(0.0, 0.70710678118, 0.70710678118, 0.0);
-//        Eigen::Quaterniond q(0.0, 0.70710678118, 0,0);
-//        att_enu = q * att_ned;
-
         att_ned.w() = x(10);
         att_ned.x() = x(11);
         att_ned.y() = x(12);
@@ -86,12 +79,6 @@ void EKFWrapper::PublishNavSol() {
         x(11) = att_ned.x();
         x(12) = -att_ned.y();
         x(13) = -att_ned.z();
-//        x(10) = att_enu.w();  // att_enu
-//        x(11) = att_enu.x();
-//        x(12) = -att_enu.y();
-//        x(13) = -att_enu.z();
-
-
     }
 
     auto message = autorccar_interfaces::msg::NavState();
