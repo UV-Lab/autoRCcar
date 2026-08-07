@@ -58,6 +58,12 @@ public:
     configs_["planning_control"] = {"ros2", "launch", "autorccar_planning_control", "planning_control.launch.py"};
     configs_["hardware_control"] = {"ros2", "launch", "autorccar_hardware_control", "hardware_control.launch.py"};
     configs_["costmap"] = {"ros2", "launch", "autorccar_costmap", "costmap.launch.py"};
+    configs_["map_to_image"] = {"ros2", "run", "autorccar_bridge", "map_to_image_node"};
+    configs_["gscam"] = {"ros2", "run", "autorccar_bridge", "camera_streamer_node",
+                          "--ros-args", "-p", "device:=/dev/video0",
+                          "-p", "gcs_ip:=192.168.0.15", "-p", "port:=5600",
+                          "-p", "fps:=60"
+                        };
     // "rosbag" is not put into configs_; its command is generated dynamically at start time
  
     // ── Process management ──────────────────────────────────────
