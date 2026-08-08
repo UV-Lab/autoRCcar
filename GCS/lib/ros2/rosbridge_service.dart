@@ -91,7 +91,7 @@ class RosbridgeService {
 
   void _subscribeTopics() {
     _subscribe('nav_topic', 'autorccar_interfaces/msg/NavState');
-    _subscribe('hardware_control/teleop_mode', 'std_msgs/msg/Bool');
+    _subscribe('hardware_control/teleop_mode', 'std_msgs/msg/Bool', qosDurability: 'transient_local');
     _subscribe('hardware_control/control_command', 'autorccar_interfaces/msg/ControlCommand');
     _subscribe('hardware_control/pwm_command', 'autorccar_interfaces/msg/ControlCommand');
     _subscribe('util/process_status', 'std_msgs/msg/String');
@@ -99,7 +99,7 @@ class RosbridgeService {
   }
 
   void _subscribe(String topic, String type,
-      {int? throttleRateMs, int? queueLength}) {
+      {int? throttleRateMs, int? queueLength, String? qosDurability}) {
     final msg = <String, dynamic>{
       'op': 'subscribe',
       'topic': topic,
@@ -107,6 +107,7 @@ class RosbridgeService {
     };
     if (throttleRateMs != null) msg['throttle_rate'] = throttleRateMs;
     if (queueLength != null) msg['queue_length'] = queueLength;
+    if (qosDurability != null) msg['qos'] = {'durability': qosDurability};
     _send(msg);
   }
 
