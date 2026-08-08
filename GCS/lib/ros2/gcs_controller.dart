@@ -160,7 +160,7 @@ class GcsController extends ChangeNotifier {
 
   void sendSpeedReset() {
     teleopSpeed = 0.0;
-    _ros.publishTeleopControlCommand(teleopSpeed, teleopSteer);
+    _ros.publishTeleopControlCommand(teleopSpeed, deg2rad(teleopSteer));
     notifyListeners();
   }
 
@@ -281,13 +281,13 @@ class GcsController extends ChangeNotifier {
 
   void teleopSpeedUp() {
     teleopSpeed += 0.1;
-    _ros.publishTeleopControlCommand(teleopSpeed, teleopSteer);
+    _ros.publishTeleopControlCommand(teleopSpeed, deg2rad(teleopSteer));
     notifyListeners();
   }
 
   void teleopSpeedDown() {
     teleopSpeed -= 0.1;
-    _ros.publishTeleopControlCommand(teleopSpeed, teleopSteer);
+    _ros.publishTeleopControlCommand(teleopSpeed, deg2rad(teleopSteer));
     notifyListeners();
   }
 
