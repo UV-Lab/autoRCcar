@@ -250,8 +250,8 @@ class _ControlPanelState extends State<ControlPanel> {
               signed: true, decimal: true),
           style: const TextStyle(color: Colors.white),
           decoration: const InputDecoration(
-            labelText: '진북 기준 Yaw 각도 [deg]',
-            labelStyle: TextStyle(color: Colors.white54),
+            labelText: 'East 기준 Yaw 각도 [deg, CCW+]',
+            labelStyle: TextStyle(color: Colors.white54, fontSize: 12),
             enabledBorder: OutlineInputBorder(
                 borderSide: BorderSide(color: Colors.white24)),
             focusedBorder: OutlineInputBorder(

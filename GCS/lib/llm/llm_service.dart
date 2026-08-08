@@ -56,7 +56,7 @@ action object는 다음 중 하나의 형태만 가능합니다.
 
 [VEHICLE 탭 - 경로/주행 제어]
 - {"action": "add_waypoint", "x": <East 미터, number>, "y": <North 미터, number>}
-- {"action": "set_yaw", "yaw": <진북 기준 yaw 각도(deg), -180~180>}
+- {"action": "set_yaw", "yaw": <East 기준 yaw 각도(deg, CCW+)>}
 - {"action": "start"} : 자율주행 시작
 - {"action": "stop"} : 자율주행 정지
 - {"action": "clear_all"} : 경로/궤적 전체 삭제
@@ -81,7 +81,7 @@ action object는 다음 중 하나의 형태만 가능합니다.
 
 현재 상태:
 - 위치(ENU): East=$currentEast m, North=$currentNorth m
-- yaw=$currentYawDeg deg (진북=0, 시계방향 증가)
+- yaw=$currentYawDeg deg (East=0, 반시계방향 증가)
 - teleop 모드: ${isTeleop ? "활성화(TELEOP)" : "비활성화"} → speed_up/speed_down/steer_left/steer_right/speed_reset/steer_reset은 teleop 모드가 활성화되어 있지 않으면 실행되지 않으니, 비활성 상태에서 이 명령이 필요하면 actions에 {"action":"teleop_mode","mode":1}을 먼저 추가하세요.
 - origin(GPS 기준점) 설정 여부: ${hasOrigin ? "설정됨" : "설정되지 않음 (좌표가 부정확할 수 있음을 message에 안내)"}
 

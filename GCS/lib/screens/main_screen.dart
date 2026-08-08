@@ -612,8 +612,8 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   double _yawToMapAngle(double yawDeg) {
-    // yaw: clockwise from north [deg] → map rotation angle [rad]
-    return -yawDeg * 3.14159265 / 180.0;
+    // ENU yaw: CCW from East [deg] → screen rotation [rad] (CW positive)
+    return (90.0 - yawDeg) * 3.14159265 / 180.0;
   }
 
   void _enterOriginMode() {
