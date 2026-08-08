@@ -1,5 +1,6 @@
 build:
   symlink-install: true
   cmake-args:
-    - -DCMAKE_C_COMPILER_LAUNCHER=ccache
-    - -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+    # Use ccache when available; otherwise invoke the compiler directly.
+    - '-DCMAKE_C_COMPILER_LAUNCHER=/bin/sh;-c;command -v ccache >/dev/null 2>&1 && exec ccache "$@" || exec "$@";ccache-or-compiler'
+    - '-DCMAKE_CXX_COMPILER_LAUNCHER=/bin/sh;-c;command -v ccache >/dev/null 2>&1 && exec ccache "$@" || exec "$@";ccache-or-compiler'
