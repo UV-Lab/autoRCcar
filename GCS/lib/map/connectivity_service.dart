@@ -15,6 +15,7 @@ class ConnectivityService extends ChangeNotifier {
 
   bool _isOnline = true; // assume online until first check completes
   bool _checked = false;
+  bool _disposed = false;
   Timer? _timer;
 
   bool get isOnline => _isOnline;
@@ -34,8 +35,12 @@ class ConnectivityService extends ChangeNotifier {
       result = false;
     }
 
+    if (_disposed) return;
+
+    final firstCheck = !_checked;
     _checked = true;
-    if (result != _isOnline) {
+
+    if (result != _isOnline || firstCheck) {
       _isOnline = result;
       notifyListeners();
     }
@@ -46,6 +51,7 @@ class ConnectivityService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _timer?.cancel();
     super.dispose();
   }
