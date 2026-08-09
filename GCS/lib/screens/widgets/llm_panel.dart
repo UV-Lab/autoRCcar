@@ -131,7 +131,7 @@ class _LlmPanelState extends State<LlmPanel> {
         _responseMessage = e is LlmApiException ? e.message : '오류 발생: $e';
       });
     } finally {
-      _inputCtrl.clear();
+      if (mounted) _inputCtrl.clear();
     }
   }
 

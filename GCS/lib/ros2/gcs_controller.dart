@@ -7,7 +7,6 @@ import '../models/control_command.dart';
 import '../math/user_geometry.dart';
 import '../math/cubic_spline.dart';
 import 'rosbridge_service.dart';
-import '../models/occupancy_grid.dart';
 import '../models/system_status.dart';
 import '../models/llm_action.dart';
 import '../config/process_definitions.dart';
@@ -64,7 +63,6 @@ class GcsController extends ChangeNotifier {
     _ros.onTeleopMode = _onTeleopMode;
     _ros.onControlCommand = _onControlCommand;
     _ros.onPwmCommand = _onPwmCommand;
-    _ros.onOccupancyGrid = _onOccupancyGrid; 
     _ros.onConnectionChanged = (_) => notifyListeners();
     _ros.onProcessStatus = _onProcessStatus;
     _ros.onSystemStatus = _onSystemStatus;
@@ -75,10 +73,6 @@ class GcsController extends ChangeNotifier {
 
   // ── system status (SYSTEM tab) ──────────────────────────
   SystemStatus systemStatus = const SystemStatus();
-
-  // ── Occupancy Grid ──────────────────────────────────
-  OccupancyGridMsg? occupancyGrid;
-  int occupancyGridVersion = 0;
 
   void _onProcessStatus(Map<String, String> status) {
     processStatus = status;
@@ -95,16 +89,6 @@ class GcsController extends ChangeNotifier {
   }
 
   void disconnect() => _ros.disconnect();
-
-  void enableOccupancyGrid() => _ros.subscribeOccupancyGrid();
-  void disableOccupancyGrid() => _ros.unsubscribeOccupancyGrid();
-
-  // ── camera stream ─────────────────────────────────────────
-  Stream<Uint8List> get cameraStream => _ros.cameraStream;
-
-  void enableCamera({String topic = '/camera/image_raw/compressed'}) =>
-      _ros.subscribeCamera(topic: topic);
-  void disableCamera() => _ros.unsubscribeCamera();
 
   // ── nav callback ─────────────────────────────────────────────
   void _onNavState(NavState msg) {
@@ -176,7 +160,7 @@ class GcsController extends ChangeNotifier {
 
   void sendSpeedReset() {
     teleopSpeed = 0.0;
-    _ros.publishTeleopControlCommand(teleopSpeed, teleopSteer);
+    _ros.publishTeleopControlCommand(teleopSpeed, deg2rad(teleopSteer));
     notifyListeners();
   }
 
@@ -196,12 +180,6 @@ class GcsController extends ChangeNotifier {
     originLatDeg = latLng.latitude;
     originLonDeg = latLng.longitude;
     trajectory.clear();
-    notifyListeners();
-  }
-
-  void _onOccupancyGrid(OccupancyGridMsg grid) {
-    occupancyGrid = grid;
-    occupancyGridVersion++;
     notifyListeners();
   }
 
@@ -303,13 +281,13 @@ class GcsController extends ChangeNotifier {
 
   void teleopSpeedUp() {
     teleopSpeed += 0.1;
-    _ros.publishTeleopControlCommand(teleopSpeed, teleopSteer);
+    _ros.publishTeleopControlCommand(teleopSpeed, deg2rad(teleopSteer));
     notifyListeners();
   }
 
   void teleopSpeedDown() {
     teleopSpeed -= 0.1;
-    _ros.publishTeleopControlCommand(teleopSpeed, teleopSteer);
+    _ros.publishTeleopControlCommand(teleopSpeed, deg2rad(teleopSteer));
     notifyListeners();
   }
 
