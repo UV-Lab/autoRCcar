@@ -46,6 +46,32 @@ install(TARGETS planning_control_node
   DESTINATION lib/${PROJECT_NAME})
 
 
+# dwa_planning_control_node
+add_executable(dwa_planning_control_node
+  src/dwa_planning_control_node.cpp
+  src/dwa_planning_control.cpp
+  src/cubic_spline_path.cpp
+  src/dwa_local_planner.cpp
+)
+
+ament_target_dependencies(dwa_planning_control_node
+  rclcpp 
+  Eigen3
+  nav_msgs
+  geometry_msgs
+  visualization_msgs
+  autorccar_interfaces
+)
+
+target_include_directories(dwa_planning_control_node PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+  ${EIGEN3_INCLUDE_DIRS})
+
+install(TARGETS dwa_planning_control_node
+  DESTINATION lib/${PROJECT_NAME})
+
+
 # simulator_node
 add_executable(simulator_node
   src/simulator_node.cpp

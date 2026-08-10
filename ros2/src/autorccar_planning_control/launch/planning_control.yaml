@@ -28,6 +28,23 @@
       k_lat: 1.0
       k_lon: 1.0
 
+    dwa_optimal:
+      max_speed: 4.0 # [m/s]
+      min_speed: 0.0 # [m/s], set negative to allow reverse sampling
+      max_accel: 2.0 # [m/ss]
+      max_steering_rate: 3.0 # [rad/s]
+      speed_samples: 7 # number of velocity samples in the dynamic window
+      steering_samples: 15 # number of steering samples in the dynamic window
+      predict_time: 2.5 # forward simulation horizon [s]
+      dt: 0.1 # forward simulation step [s]
+      look_ahead_distance: 2.0 # local goal look-ahead along global path [m]
+      robot_radius: 0.3 # [m] collision margin around bounding boxes
+      k_obstacle: 5.0
+      k_heading: 1.5
+      k_distance: 1.0
+      k_velocity: 0.8
+      k_smoothness: 0.3
+
     simulator:
       simulation_hz: 500 # [Hz]
       nav_pub_hz: 100 # [Hz]
