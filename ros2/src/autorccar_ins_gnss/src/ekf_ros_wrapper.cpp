@@ -59,7 +59,7 @@ void EKFWrapper::GpsCallback(const autorccar_interfaces::msg::Gnss& msg) {
 void EKFWrapper::InitYawCallback(const std_msgs::msg::Float32& msg) {
     // Set Initial yaw [deg]
     // This function resets all variables and restarts the EKF.
-    mpEKF->SetYawInit(msg.data);
+    mpEKF->SetYawInit(-msg.data);
 }
 
 void EKFWrapper::PublishNavSol() {
@@ -76,8 +76,8 @@ void EKFWrapper::PublishNavSol() {
         att_ned.y() = x(12);
         att_ned.z() = x(13);
         x(10) = att_ned.w();  // att_enu
-        x(11) = att_ned.y();
-        x(12) = att_ned.x();
+        x(11) = att_ned.x();
+        x(12) = -att_ned.y();
         x(13) = -att_ned.z();
     }
 

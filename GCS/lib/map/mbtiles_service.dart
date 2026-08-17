@@ -31,12 +31,12 @@ class MbtilesService {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
 
-      // 실행파일 옆 map.mbtiles 만 사용
+      // Use only map.mbtiles located next to the executable
       final exeDir = File(Platform.resolvedExecutable).parent.path;
       final dbPath = '$exeDir${Platform.pathSeparator}$_localFileName';
 
       if (!await File(dbPath).exists()) {
-        // 파일이 없으면 오프라인 지도 사용 불가 처리
+        // Disable offline maps if the file does not exist
         _initFailed = true;
         _db = null;
         return;
