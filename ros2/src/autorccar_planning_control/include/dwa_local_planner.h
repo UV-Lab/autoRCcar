@@ -62,6 +62,7 @@ struct Parameters {
     double k_distance = 0.0;
     double k_velocity = 0.0;
     double k_smoothness = 0.0;
+    double k_path = 0.0;
 };
 
 class DwaLocalPlanner {

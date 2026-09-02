@@ -42,6 +42,7 @@ DwaLocalPlanner::DwaLocalPlanner(const Parameters& parameters) : parameters_(par
     std::cout << "k_distance: " << parameters_.k_distance << std::endl;
     std::cout << "k_velocity: " << parameters_.k_velocity << std::endl;
     std::cout << "k_smoothness: " << parameters_.k_smoothness << std::endl;
+    std::cout << "k_path: " << parameters_.k_path << std::endl;
 }
 
 void DwaLocalPlanner::Planning(const std::unique_ptr<CubicSplinePath>& global_path, const State& current_state) {
@@ -100,7 +101,7 @@ void DwaLocalPlanner::Planning(const std::unique_ptr<CubicSplinePath>& global_pa
 
             const double cost = -(parameters_.k_obstacle * obstacle_cost + parameters_.k_heading * heading_cost +
                                   parameters_.k_distance * distance_cost + parameters_.k_velocity * velocity_cost +
-                                  parameters_.k_smoothness * smoothness_cost + k_path * path_cost);
+                                  parameters_.k_smoothness * smoothness_cost + parameters_.k_path * path_cost);
 
             if (cost > best_cost) {
                 best_cost = cost;
