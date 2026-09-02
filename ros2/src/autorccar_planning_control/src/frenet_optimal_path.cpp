@@ -1,6 +1,7 @@
 #include "frenet_optimal_path.h"
 
 #include <algorithm>
+#include <cmath>
 #include <eigen3/Eigen/Dense>
 #include <iostream>
 #include <limits>
@@ -334,7 +335,7 @@ void FrenetOptimalPath::CheckPaths() {
     frenet_paths_.erase(std::remove_if(frenet_paths_.begin(), frenet_paths_.end(),
                                        [this](FrenetPath& fp) {
                                            for (int i = 0; i < static_cast<int>(fp.dd_s.size()); ++i) {
-                                               if (fp.dd_s.at(i) > parameters_.max_accel) return true;
+                                               if (std::abs(fp.dd_s.at(i)) > parameters_.max_accel) return true;
                                            }
                                            return false;
                                        }),
@@ -344,7 +345,7 @@ void FrenetOptimalPath::CheckPaths() {
     frenet_paths_.erase(std::remove_if(frenet_paths_.begin(), frenet_paths_.end(),
                                        [this](FrenetPath& fp) {
                                            for (int i = 0; i < static_cast<int>(fp.c.size()); ++i) {
-                                               if (fp.c.at(i) > parameters_.max_curvature) return true;
+                                               if (std::abs(fp.c.at(i)) > parameters_.max_curvature) return true;
                                            }
                                            return false;
                                        }),
