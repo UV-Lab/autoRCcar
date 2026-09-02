@@ -293,6 +293,10 @@ void FrenetOptimalPath::CalculateGlobalPaths(const std::unique_ptr<CubicSplinePa
             fp.path.push_back(pos);
         }
 
+        if (fp.path.size() < 2) {
+            continue;  // Trajectory with insufficient points to compute yaw and curvature
+        }
+
         // Calculate yaw and ds
         fp.yaw.reserve(fp.path.size());
         for (int j = 0; j < static_cast<int>(fp.path.size()) - 1; j++) {
@@ -312,6 +316,10 @@ void FrenetOptimalPath::CalculateGlobalPaths(const std::unique_ptr<CubicSplinePa
 }
 
 void FrenetOptimalPath::CheckPaths() {
+    // Remove paths that are too short to have global coordinates computed
+    frenet_paths_.erase(std::remove_if(frenet_paths_.begin(), frenet_paths_.end(),
+                                       [](const FrenetPath& fp) { return fp.path.size() < 2; }),
+                        frenet_paths_.end());
     // Check max speed
     frenet_paths_.erase(std::remove_if(frenet_paths_.begin(), frenet_paths_.end(),
                                        [this](FrenetPath& fp) {
