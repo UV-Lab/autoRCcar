@@ -216,7 +216,7 @@ void FrenetOptimalPath::CalculateFrenetPaths(const FrenetState& current_state) {
     const double& k_lon = parameters_.k_lon;
     const double& target_speed = parameters_.target_speed;
     const double& d_t_s = parameters_.d_target_speed;
-    const double& n_s_sample = parameters_.d_target_speed;
+    const int n_s_sample = parameters_.n_speed_sample;
     const double& c_speed = current_state.speed;
     const double& c_s = current_state.course_distance;
     const double& c_accel = current_state.accel;
