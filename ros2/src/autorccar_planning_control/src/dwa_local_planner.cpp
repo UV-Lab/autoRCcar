@@ -96,10 +96,11 @@ void DwaLocalPlanner::Planning(const std::unique_ptr<CubicSplinePath>& global_pa
                 std::fabs(parameters_.target_speed - v) / std::max(parameters_.max_speed, 1e-6);
             const double smoothness_cost =
                 std::fabs(steering - last_steering_angle_) / std::max(parameters_.max_steering_angle, 1e-6);
+            const double path_cost = CalcPathFollowingCost(trajectory, *global_path);
 
             const double cost = -(parameters_.k_obstacle * obstacle_cost + parameters_.k_heading * heading_cost +
                                   parameters_.k_distance * distance_cost + parameters_.k_velocity * velocity_cost +
-                                  parameters_.k_smoothness * smoothness_cost);
+                                  parameters_.k_smoothness * smoothness_cost + k_path * path_cost);
 
             if (cost > best_cost) {
                 best_cost = cost;
@@ -165,6 +166,20 @@ double DwaLocalPlanner::CalcObstacleCost(const Path& path) const {
         }
     }
     return 0.0;
+}
+
+double DwaLocalPlanner::CalcPathFollowingCost(const Path& trajectory, const CubicSplinePath& global_path) const {
+    if (trajectory.empty()) {
+        return std::numeric_limits<double>::max();
+    }
+
+    double cost = 0.0;
+    for (const auto& point : trajectory) {
+        const Reference reference = global_path.ReferencePoint(point);
+
+        cost += (point - reference.point).squaredNorm();
+    }
+    return cost / static_cast<double>(trajectory.size());
 }
 
 double DwaLocalPlanner::CalcHeadingCost(const Point& end_pos, double end_yaw, const Point& goal) const {

@@ -85,6 +85,7 @@ class DwaLocalPlanner {
     double CalcObstacleCost(const Path& path) const;
     double CalcHeadingCost(const Point& end_pos, double end_yaw, const Point& goal) const;
     double CalcDistanceCost(const Point& end_pos, const Point& goal) const;
+    double CalcPathFollowingCost(const Path& trajectory, const CubicSplinePath& global_path) const;
 
     Parameters parameters_;
     std::vector<BoundingBox> bounding_boxes_;
