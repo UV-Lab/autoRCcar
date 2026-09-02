@@ -121,7 +121,7 @@ Path PlanningControl::GetCurrentLocalPath() { return current_frenet_path_.path; 
 
 double PlanningControl::CalcSpeedCommand(const State& state, const double target_speed) {
     Point position(state.pos.x(), state.pos.y());
-    double remain_distance = local_path_->GetRemainDistance(position);
+    double remain_distance = std::max(0.0, global_path_->GetRemainDistance(position));
     double stop_distance = (target_speed * target_speed) / (2 * parameters_.control.decel);
 
     if (remain_distance < stop_distance) {
