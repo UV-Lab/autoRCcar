@@ -40,9 +40,15 @@ PlanningControl::PlanningControl(const Parameters& parameters)
 }
 
 void PlanningControl::SetGlobalPath(std::vector<Point>&& global_path, std::vector<double>&& /*speeds*/) {
-    goal_ = global_path.back();
     global_path_.reset();
     got_global_path_ = false;
+
+    if (global_path.size() < 2) {
+        std::cout << "Received global path has fewer than 2 points. Ignoring." << std::endl;
+        return;
+    }
+
+    goal_ = global_path.back();
     global_path_ = std::make_unique<CubicSplinePath>(std::move(global_path));
     got_global_path_ = global_path_->IsPathGenerated();
 }

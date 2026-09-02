@@ -162,6 +162,11 @@ class PlanningControlNode : public rclcpp::Node {
     }
 
     void GlobalPathCallback(const autorccar_interfaces::msg::Path& msg) const {
+        if (msg.path_points.size() < 2) {
+            std::cout << "Received global path with fewer than 2 points. Ignoring." << std::endl;
+            return;
+        }
+
         std::vector<Point> global_path;
         std::vector<double> speeds;
         for (const auto& path_point : msg.path_points) {
