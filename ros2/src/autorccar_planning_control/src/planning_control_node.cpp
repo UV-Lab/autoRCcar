@@ -1,6 +1,6 @@
-#include <algorithm>
 #include <cstdlib>
 #include <eigen3/Eigen/Dense>
+#include <iostream>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -87,7 +87,8 @@ class PlanningControlNode : public rclcpp::Node {
             control_hz_ = 50;
         }
         nav_sampling_period_ = nav_hz_ / control_hz_;
-        parameters_.control.control_dt = 1.0 / control_hz_;
+        parameters_.control.control_dt = static_cast<double>(nav_sampling_period_) / nav_hz_;
+
         get_parameter_or<double>("controller.accel", parameters_.control.accel, parameters_.control.accel);
         get_parameter_or<double>("controller.decel", parameters_.control.decel, parameters_.control.decel);
         get_parameter_or<double>("controller.pure_pursuiter.look_ahead_distance",
