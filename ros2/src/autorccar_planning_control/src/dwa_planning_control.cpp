@@ -115,7 +115,9 @@ Path DwaPlanningControl::GetCurrentLocalPath() { return current_dwa_path_.path; 
 
 double DwaPlanningControl::CalcSpeedCommand(const State& state, const double target_speed) {
     Point position(state.pos.x(), state.pos.y());
-    double remain_distance = local_path_->GetRemainDistance(position);
+    Reference global_reference = global_path_->ReferencePoint(position);
+    double remain_distance = std::max(0.0, global_reference.remain_distance);
+
     double stop_distance = (target_speed * target_speed) / (2 * parameters_.control.decel);
 
     if (remain_distance < stop_distance) {
