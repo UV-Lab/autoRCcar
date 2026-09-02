@@ -96,6 +96,10 @@ ControlCommand PlanningControl::GenerateMotionCommand() {
         return {0.0, 0.0};
     }
 
+    if (current_frenet_path_.d_s.size() < 2) {
+        std::cout << "Frenet path too short to extract target speed." << std::endl;
+        return {0.0, 0.0};
+    }
     double target_speed = current_frenet_path_.d_s.at(1);
     double speed = CalcSpeedCommand(current_state_, target_speed);
 
