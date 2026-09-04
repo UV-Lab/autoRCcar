@@ -114,6 +114,7 @@ class DwaPlanningControlNode : public rclcpp::Node {
         get_parameter_or<double>("dwa_optimal.k_velocity", parameters_.dwa.k_velocity, parameters_.dwa.k_velocity);
         get_parameter_or<double>("dwa_optimal.k_smoothness", parameters_.dwa.k_smoothness,
                                  parameters_.dwa.k_smoothness);
+        get_parameter_or<double>("dwa_optimal.k_path", parameters_.dwa.k_path, parameters_.dwa.k_path);
     }
 
     void NavStateCallback(const autorccar_interfaces::msg::NavState& msg) {
