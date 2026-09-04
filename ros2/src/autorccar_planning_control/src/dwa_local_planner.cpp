@@ -86,7 +86,8 @@ void DwaLocalPlanner::Planning(const std::unique_ptr<CubicSplinePath>& global_pa
 
             std::vector<double> yaws;
             Path trajectory = SimulateTrajectory(v, steering, current_pos, current_yaw, &yaws);
-            if (trajectory.empty()) continue;
+            if (trajectory.size() < 2) continue;
+            if ((trajectory.back() - trajectory.front()).norm() < 1e-6) continue;  // v≈0 퇴화 궤적
 
             const double obstacle_cost = CalcObstacleCost(trajectory);
             if (obstacle_cost < 0.0) continue;  // trajectory collides, discard
@@ -198,7 +199,9 @@ void DwaLocalPlanner::SetBoundingBoxes(std::vector<BoundingBox>&& bounding_boxes
     bounding_boxes_ = std::move(bounding_boxes);
 }
 
-bool DwaLocalPlanner::IsPathGenerated() { return current_path_.path.size() >= 2; }
+bool DwaLocalPlanner::IsPathGenerated() {
+    return current_path_.path.size() >= 2 && (current_path_.path.back() - current_path_.path.front()).norm() > 1e-6;
+}
 
 DwaPath DwaLocalPlanner::GetCurrentPath() const {
     if (current_path_.path.size() < 2) return {};
