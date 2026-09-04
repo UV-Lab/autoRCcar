@@ -40,9 +40,15 @@ PlanningControl::PlanningControl(const Parameters& parameters)
 }
 
 void PlanningControl::SetGlobalPath(std::vector<Point>&& global_path, std::vector<double>&& /*speeds*/) {
-    goal_ = global_path.back();
     global_path_.reset();
     got_global_path_ = false;
+
+    if (global_path.size() < 2) {
+        std::cout << "Received global path has fewer than 2 points. Ignoring." << std::endl;
+        return;
+    }
+
+    goal_ = global_path.back();
     global_path_ = std::make_unique<CubicSplinePath>(std::move(global_path));
     got_global_path_ = global_path_->IsPathGenerated();
 }
@@ -90,6 +96,10 @@ ControlCommand PlanningControl::GenerateMotionCommand() {
         return {0.0, 0.0};
     }
 
+    if (current_frenet_path_.d_s.size() < 2) {
+        std::cout << "Frenet path too short to extract target speed." << std::endl;
+        return {0.0, 0.0};
+    }
     double target_speed = current_frenet_path_.d_s.at(1);
     double speed = CalcSpeedCommand(current_state_, target_speed);
 
@@ -111,7 +121,7 @@ Path PlanningControl::GetCurrentLocalPath() { return current_frenet_path_.path; 
 
 double PlanningControl::CalcSpeedCommand(const State& state, const double target_speed) {
     Point position(state.pos.x(), state.pos.y());
-    double remain_distance = local_path_->GetRemainDistance(position);
+    double remain_distance = std::max(0.0, global_path_->GetRemainDistance(position));
     double stop_distance = (target_speed * target_speed) / (2 * parameters_.control.decel);
 
     if (remain_distance < stop_distance) {

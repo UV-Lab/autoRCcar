@@ -134,6 +134,7 @@ CubicSplinePath::CubicSplinePath(Path&& input_path) : path_(std::move(input_path
     if (path_.size() < 2) {
         std::cout << "Path must have at least two points." << std::endl;
         path_generated_ = false;
+        return;
     }
     total_distance_ = cubic_spline_path_.GetDistance(static_cast<int>(path_.size()) - 1);
     path_generated_ = true;

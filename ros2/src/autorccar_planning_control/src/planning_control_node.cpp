@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <eigen3/Eigen/Dense>
+#include <iostream>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -80,8 +81,14 @@ class PlanningControlNode : public rclcpp::Node {
         get_parameter_or<double>("controller.target_speed", parameters_.target_speed, parameters_.target_speed);
         get_parameter_or<int>("controller.nav_hz", nav_hz_, nav_hz_);
         get_parameter_or<int>("controller.control_hz", control_hz_, control_hz_);
+        if (nav_hz_ <= 0 || control_hz_ <= 0 || control_hz_ > nav_hz_) {
+            std::cout << "Invalid nav_hz/control_hz. Falling back to defaults (100/50)." << std::endl;
+            nav_hz_ = 100;
+            control_hz_ = 50;
+        }
         nav_sampling_period_ = nav_hz_ / control_hz_;
-        parameters_.control.control_dt = 1.0 / control_hz_;
+        parameters_.control.control_dt = static_cast<double>(nav_sampling_period_) / nav_hz_;
+
         get_parameter_or<double>("controller.accel", parameters_.control.accel, parameters_.control.accel);
         get_parameter_or<double>("controller.decel", parameters_.control.decel, parameters_.control.decel);
         get_parameter_or<double>("controller.pure_pursuiter.look_ahead_distance",
@@ -114,7 +121,7 @@ class PlanningControlNode : public rclcpp::Node {
     }
 
     void NavStateCallback(const autorccar_interfaces::msg::NavState& msg) {
-        if (++nav_sample_count_ > nav_sampling_period_) return;
+        if (++nav_sample_count_ < nav_sampling_period_) return;
         nav_sample_count_ = 0;
 
         VisualizeNavState(msg);
@@ -162,6 +169,11 @@ class PlanningControlNode : public rclcpp::Node {
     }
 
     void GlobalPathCallback(const autorccar_interfaces::msg::Path& msg) const {
+        if (msg.path_points.size() < 2) {
+            std::cout << "Received global path with fewer than 2 points. Ignoring." << std::endl;
+            return;
+        }
+
         std::vector<Point> global_path;
         std::vector<double> speeds;
         for (const auto& path_point : msg.path_points) {

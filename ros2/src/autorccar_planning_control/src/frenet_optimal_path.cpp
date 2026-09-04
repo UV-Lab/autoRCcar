@@ -1,6 +1,7 @@
 #include "frenet_optimal_path.h"
 
 #include <algorithm>
+#include <cmath>
 #include <eigen3/Eigen/Dense>
 #include <iostream>
 #include <limits>
@@ -216,7 +217,7 @@ void FrenetOptimalPath::CalculateFrenetPaths(const FrenetState& current_state) {
     const double& k_lon = parameters_.k_lon;
     const double& target_speed = parameters_.target_speed;
     const double& d_t_s = parameters_.d_target_speed;
-    const double& n_s_sample = parameters_.d_target_speed;
+    const int n_s_sample = parameters_.n_speed_sample;
     const double& c_speed = current_state.speed;
     const double& c_s = current_state.course_distance;
     const double& c_accel = current_state.accel;
@@ -293,6 +294,10 @@ void FrenetOptimalPath::CalculateGlobalPaths(const std::unique_ptr<CubicSplinePa
             fp.path.push_back(pos);
         }
 
+        if (fp.path.size() < 2) {
+            continue;  // Trajectory with insufficient points to compute yaw and curvature
+        }
+
         // Calculate yaw and ds
         fp.yaw.reserve(fp.path.size());
         for (int j = 0; j < static_cast<int>(fp.path.size()) - 1; j++) {
@@ -312,6 +317,10 @@ void FrenetOptimalPath::CalculateGlobalPaths(const std::unique_ptr<CubicSplinePa
 }
 
 void FrenetOptimalPath::CheckPaths() {
+    // Remove paths that are too short to have global coordinates computed
+    frenet_paths_.erase(std::remove_if(frenet_paths_.begin(), frenet_paths_.end(),
+                                       [](const FrenetPath& fp) { return fp.path.size() < 2; }),
+                        frenet_paths_.end());
     // Check max speed
     frenet_paths_.erase(std::remove_if(frenet_paths_.begin(), frenet_paths_.end(),
                                        [this](FrenetPath& fp) {
@@ -326,7 +335,7 @@ void FrenetOptimalPath::CheckPaths() {
     frenet_paths_.erase(std::remove_if(frenet_paths_.begin(), frenet_paths_.end(),
                                        [this](FrenetPath& fp) {
                                            for (int i = 0; i < static_cast<int>(fp.dd_s.size()); ++i) {
-                                               if (fp.dd_s.at(i) > parameters_.max_accel) return true;
+                                               if (std::abs(fp.dd_s.at(i)) > parameters_.max_accel) return true;
                                            }
                                            return false;
                                        }),
@@ -336,7 +345,7 @@ void FrenetOptimalPath::CheckPaths() {
     frenet_paths_.erase(std::remove_if(frenet_paths_.begin(), frenet_paths_.end(),
                                        [this](FrenetPath& fp) {
                                            for (int i = 0; i < static_cast<int>(fp.c.size()); ++i) {
-                                               if (fp.c.at(i) > parameters_.max_curvature) return true;
+                                               if (std::abs(fp.c.at(i)) > parameters_.max_curvature) return true;
                                            }
                                            return false;
                                        }),
