@@ -44,7 +44,7 @@
       k_distance: 1.0
       k_velocity: 0.8
       k_smoothness: 0.3
-      k_path = 1.0
+      k_path: 1.0
 
     simulator:
       simulation_hz: 500 # [Hz]

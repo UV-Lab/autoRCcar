@@ -169,7 +169,7 @@ double DwaLocalPlanner::CalcObstacleCost(const Path& path) const {
     return 0.0;
 }
 
-double DwaLocalPlanner::CalcPathFollowingCost(const Path& trajectory, const CubicSplinePath& global_path) const {
+double DwaLocalPlanner::CalcPathFollowingCost(const Path& trajectory, CubicSplinePath& global_path) const {
     if (trajectory.empty()) {
         return std::numeric_limits<double>::max();
     }
