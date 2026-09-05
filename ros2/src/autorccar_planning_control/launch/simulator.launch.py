@@ -18,6 +18,11 @@ def generate_launch_description():
         "launch",
         "hardware_control.yaml",
     )
+    nav_config_file_path = os.path.join(
+        get_package_share_directory("autorccar_planning_control"),
+        "launch",
+        "nav.yaml",
+    )
     planning_control_node = Node(
         package="autorccar_planning_control",
         executable="simulator_node",
@@ -25,6 +30,7 @@ def generate_launch_description():
         parameters=[
             planning_control_config_file_path,
             hardware_control_config_file_path,
+            nav_config_file_path,
         ],
         output="screen",
     )

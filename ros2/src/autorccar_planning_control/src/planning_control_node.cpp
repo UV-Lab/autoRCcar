@@ -1,3 +1,4 @@
+#include <chrono>
 #include <cstdlib>
 #include <eigen3/Eigen/Dense>
 #include <iostream>
@@ -21,6 +22,20 @@
 namespace {
 
 using Point = Eigen::Vector2d;
+
+autorccar::planning_control::common::State ToState(const autorccar_interfaces::msg::NavState& msg) {
+    autorccar::planning_control::common::State state;
+    state.timestamp = msg.timestamp.sec + msg.timestamp.nanosec * 1e-9;
+    state.pos << msg.position.x, msg.position.y, msg.position.z;
+    state.vel << msg.velocity.x, msg.velocity.y, msg.velocity.z;
+    state.quat.w() = msg.quaternion.w;
+    state.quat.x() = msg.quaternion.x;
+    state.quat.y() = msg.quaternion.y;
+    state.quat.z() = msg.quaternion.z;
+    state.accel << msg.acceleration.x, msg.acceleration.y, msg.acceleration.z;
+    state.ang_vel << msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z;
+    return state;
+}
 
 }  // namespace
 
@@ -50,11 +65,18 @@ class PlanningControlNode : public rclcpp::Node {
             create_publisher<nav_msgs::msg::Path>("rviz/local_path", rclcpp::SystemDefaultsQoS());
 
         // subscriber
+        rclcpp::SubscriptionOptions nav_state_subscription_options;
         auto nav_state_callback = [this](autorccar_interfaces::msg::NavState::UniquePtr msg) {
             this->NavStateCallback(*msg);
         };
-        nav_state_subscriber_ =
-            create_subscription<autorccar_interfaces::msg::NavState>("nav_topic", 10, nav_state_callback);
+        nav_state_subscription_options.event_callbacks.deadline_callback =
+            [this](const rclcpp::QOSDeadlineRequestedInfo& /*event*/) {
+                nav_stale_ = true;
+                std::cout << "NavState deadline missed. Holding control command until nav_topic resumes." << std::endl;
+            };
+        nav_state_subscriber_ = create_subscription<autorccar_interfaces::msg::NavState>(
+            "nav_topic", rclcpp::SystemDefaultsQoS().deadline(std::chrono::milliseconds(nav_state_deadline_)),
+            nav_state_callback, nav_state_subscription_options);
 
         auto bounding_boxes_callback = [this](autorccar_interfaces::msg::BoundingBoxes::UniquePtr msg) {
             this->BoundingBoxesCallback(*msg);
@@ -67,6 +89,14 @@ class PlanningControlNode : public rclcpp::Node {
         };
         global_path_subscriber_ = create_subscription<autorccar_interfaces::msg::Path>(
             "gcs/global_path", rclcpp::SystemDefaultsQoS(), global_path_callback);
+
+        // timers
+        planning_timer_ = create_wall_timer(std::chrono::milliseconds(1000 / planning_hz_), [this] {
+            planning_controller_->PlanOnce();
+            VisualizeLocalPath(planning_controller_->GetCurrentLocalPath());
+        });
+        control_timer_ =
+            create_wall_timer(std::chrono::milliseconds(1000 / control_hz_), [this] { this->ControlTimerCallback(); });
     }
 
    private:
@@ -76,18 +106,21 @@ class PlanningControlNode : public rclcpp::Node {
                                  parameters_.max_steering_angle);
         get_parameter_or<int>("hardware_control.control_command_deadline", control_command_deadline_,
                               control_command_deadline_);
+        get_parameter_or<int>("nav.state_deadline", nav_state_deadline_, nav_state_deadline_);
         get_parameter_or<double>("controller.goal_reach_threshold", parameters_.control.goal_reach_threshold,
                                  parameters_.control.goal_reach_threshold);
         get_parameter_or<double>("controller.target_speed", parameters_.target_speed, parameters_.target_speed);
-        get_parameter_or<int>("controller.nav_hz", nav_hz_, nav_hz_);
         get_parameter_or<int>("controller.control_hz", control_hz_, control_hz_);
-        if (nav_hz_ <= 0 || control_hz_ <= 0 || control_hz_ > nav_hz_) {
-            std::cout << "Invalid nav_hz/control_hz. Falling back to defaults (100/50)." << std::endl;
-            nav_hz_ = 100;
+        get_parameter_or<int>("controller.planning_hz", planning_hz_, planning_hz_);
+        if (control_hz_ <= 0) {
+            std::cout << "Invalid control_hz. Falling back to default (50)." << std::endl;
             control_hz_ = 50;
         }
-        nav_sampling_period_ = nav_hz_ / control_hz_;
-        parameters_.control.control_dt = static_cast<double>(nav_sampling_period_) / nav_hz_;
+        if (planning_hz_ <= 0) {
+            std::cout << "Invalid planning_hz. Falling back to default (10)." << std::endl;
+            planning_hz_ = 10;
+        }
+        parameters_.control.control_dt = 1.0 / control_hz_;
 
         get_parameter_or<double>("controller.accel", parameters_.control.accel, parameters_.control.accel);
         get_parameter_or<double>("controller.decel", parameters_.control.decel, parameters_.control.decel);
@@ -121,12 +154,9 @@ class PlanningControlNode : public rclcpp::Node {
     }
 
     void NavStateCallback(const autorccar_interfaces::msg::NavState& msg) {
-        if (++nav_sample_count_ < nav_sampling_period_) return;
-        nav_sample_count_ = 0;
-
+        nav_stale_ = false;
+        planning_controller_->SetCurrentState(ToState(msg));
         VisualizeNavState(msg);
-        GenerateControlCommand(msg);
-        VisualizeLocalPath(planning_controller_->GetCurrentLocalPath());
     }
 
     void BoundingBoxesCallback(const autorccar_interfaces::msg::BoundingBoxes& msg) {
@@ -141,30 +171,22 @@ class PlanningControlNode : public rclcpp::Node {
             bboxes.push_back(bounding_box);
         }
         planning_controller_->SetBoundingBoxes(std::move(bboxes));
-        planning_controller_->PlanOnce();
     }
 
-    void GenerateControlCommand(const autorccar_interfaces::msg::NavState& msg) const {
-        autorccar::planning_control::common::State state;
-
-        state.timestamp = msg.timestamp.sec + msg.timestamp.nanosec * 1e-9;
-        state.pos << msg.position.x, msg.position.y, msg.position.z;
-        state.vel << msg.velocity.x, msg.velocity.y, msg.velocity.z;
-        state.quat.w() = msg.quaternion.w;
-        state.quat.x() = msg.quaternion.x;
-        state.quat.y() = msg.quaternion.y;
-        state.quat.z() = msg.quaternion.z;
-        state.accel << msg.acceleration.x, msg.acceleration.y, msg.acceleration.z;
-        state.ang_vel << msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z;
-        planning_controller_->SetCurrentState(state);
-
-        autorccar::planning_control::planning_control::ControlCommand control_command;
-        control_command = planning_controller_->GenerateMotionCommand();
-
+    void ControlTimerCallback() {
         autorccar_interfaces::msg::ControlCommand control_command_msg;
+
+        if (nav_stale_) {
+            control_command_msg.speed = 0.0;
+            control_command_msg.steering_angle = 0.0;
+            control_command_publisher_->publish(control_command_msg);
+            return;
+        }
+
+        autorccar::planning_control::planning_control::ControlCommand control_command =
+            planning_controller_->GenerateMotionCommand();
         control_command_msg.speed = control_command.speed;
         control_command_msg.steering_angle = control_command.steering_angle;
-
         control_command_publisher_->publish(control_command_msg);
     }
 
@@ -355,12 +377,16 @@ class PlanningControlNode : public rclcpp::Node {
     rclcpp::Subscription<autorccar_interfaces::msg::BoundingBoxes>::SharedPtr bounding_boxes_subscriber_;
     rclcpp::Subscription<autorccar_interfaces::msg::Path>::SharedPtr global_path_subscriber_;
 
+    // timer
+    rclcpp::TimerBase::SharedPtr planning_timer_;
+    rclcpp::TimerBase::SharedPtr control_timer_;
+
     // variables
-    int nav_hz_{100};
     int control_hz_{50};
-    int nav_sample_count_{0};
-    int nav_sampling_period_{2};
+    int planning_hz_{10};
     int control_command_deadline_{1000};
+    int nav_state_deadline_{200};
+    bool nav_stale_{true};  // no nav_state received yet
 };
 
 int main(int argc, char** argv) {

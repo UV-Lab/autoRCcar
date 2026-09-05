@@ -1,3 +1,5 @@
+#include <chrono>
+
 #include <gtsam/geometry/Pose3.h>
 #include <gtsam/geometry/Rot3.h>
 #include <gtsam/inference/Symbol.h>
@@ -219,7 +221,11 @@ class IMUPreintegration : public ParamServer {
             std::bind(&IMUPreintegration::odometryHandler, this, std::placeholders::_1), odomOpt);
 
         pubImuOdometry = create_publisher<nav_msgs::msg::Odometry>(odomTopic + "_incremental", qos_imu);
-        pubNavState = create_publisher<autorccar_interfaces::msg::NavState>("/nav_topic", 10);
+        
+        declare_parameter<int>("nav.state_deadline", 200);
+        int nav_state_deadline = get_parameter("nav.state_deadline").as_int();
+        pubNavState = create_publisher<autorccar_interfaces::msg::NavState>(
+            "/nav_topic", rclcpp::QoS(10).deadline(std::chrono::milliseconds(nav_state_deadline)));
 
         boost::shared_ptr<gtsam::PreintegrationParams> p = gtsam::PreintegrationParams::MakeSharedU(imuGravity);
         p->accelerometerCovariance =
