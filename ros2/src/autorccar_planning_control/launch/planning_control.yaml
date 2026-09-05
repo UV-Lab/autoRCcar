@@ -3,8 +3,8 @@
     controller:
       goal_reach_threshold: 0.3 # [m]
       target_speed: 1.0 # [m/s]
-      nav_hz: 100 # [Hz]
       control_hz: 50 # [Hz]
+      planning_hz: 10 # [Hz]
       accel: 0.5 # [m/s^2]
       decel: 0.5 # [m/s^2]
       pure_pursuiter:
