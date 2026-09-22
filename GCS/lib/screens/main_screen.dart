@@ -610,26 +610,69 @@ class _MainScreenState extends State<MainScreen> {
             ],
           ),
         ),
-        // top-right: vehicle top view (same as MANUAL tab)
+        // top-right: vehicle top view (same as MANUAL tab) + control_command values
         Positioned(
           top: 16,
           right: 16,
           child: Container(
-            padding: const EdgeInsets.all(4),
+            padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
               color: Colors.black.withOpacity(0.6),
               borderRadius: BorderRadius.circular(6),
             ),
-            child: SizedBox(
-              width: 150,
-              height: 100,
-              child: CustomPaint(
-                painter: CarTopViewPainter(
-                  speed: ctrl.pwmCommand.speed,
-                  steeringAngle: ctrl.pwmCommand.steeringAngle,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 150,
+                  height: 100,
+                  child: CustomPaint(
+                    painter: CarTopViewPainter(
+                      speed: ctrl.pwmCommand.speed,
+                      steeringAngle: ctrl.pwmCommand.steeringAngle,
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _controlValueBox('Speed', ctrl.controlCommand.speed),
+                    const SizedBox(height: 10),
+                    _controlValueBox('Steer', ctrl.controlCommand.steeringAngle),
+                  ],
+                ),
+              ],
             ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _controlValueBox(String label, double value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white54,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.5,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value.toStringAsFixed(2),
+          style: const TextStyle(
+            color: Colors.cyanAccent,
+            fontSize: 14,
+            fontFamily: 'monospace',
+            fontWeight: FontWeight.bold,
           ),
         ),
       ],
