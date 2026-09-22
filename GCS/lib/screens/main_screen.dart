@@ -546,67 +546,92 @@ class _MainScreenState extends State<MainScreen> {
             ],
           ),
         ),
-        // bottom-right zoom display
+        // bottom-right: GPS position (above) + zoom display
         Positioned(
           bottom: 16,
           right: 16,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (ctrl.vehiclePosition != null)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'GPS POSITION',
+                        style: TextStyle(
+                            color: Colors.white54,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.5),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Lat: ${ctrl.vehiclePosition!.latitude.toStringAsFixed(7)}',
+                        style: const TextStyle(
+                            color: Colors.lightBlueAccent,
+                            fontSize: 12,
+                            fontFamily: 'monospace'),
+                      ),
+                      Text(
+                        'Lon: ${ctrl.vehiclePosition!.longitude.toStringAsFixed(7)}',
+                        style: const TextStyle(
+                            color: Colors.lightBlueAccent,
+                            fontSize: 12,
+                            fontFamily: 'monospace'),
+                      ),
+                    ],
+                  ),
+                ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  'Zoom: ${_currentZoom.toStringAsFixed(1)}',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // top-right: vehicle top view (same as MANUAL tab)
+        Positioned(
+          top: 16,
+          right: 16,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
               color: Colors.black.withOpacity(0.6),
               borderRadius: BorderRadius.circular(6),
             ),
-            child: Text(
-              'Zoom: ${_currentZoom.toStringAsFixed(1)}',
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 11,
-                fontFamily: 'monospace',
+            child: SizedBox(
+              width: 150,
+              height: 100,
+              child: CustomPaint(
+                painter: CarTopViewPainter(
+                  speed: ctrl.pwmCommand.speed,
+                  steeringAngle: ctrl.pwmCommand.steeringAngle,
+                ),
               ),
             ),
           ),
         ),
-        // top-right GPS display
-        if (ctrl.vehiclePosition != null)
-          Positioned(
-            top: 16,
-            right: 16,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.6),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  const Text(
-                    'GPS POSITION',
-                    style: TextStyle(
-                        color: Colors.white54,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.5),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Lat: ${ctrl.vehiclePosition!.latitude.toStringAsFixed(7)}',
-                    style: const TextStyle(
-                        color: Colors.lightBlueAccent,
-                        fontSize: 12,
-                        fontFamily: 'monospace'),
-                  ),
-                  Text(
-                    'Lon: ${ctrl.vehiclePosition!.longitude.toStringAsFixed(7)}',
-                    style: const TextStyle(
-                        color: Colors.lightBlueAccent,
-                        fontSize: 12,
-                        fontFamily: 'monospace'),
-                  ),
-                ],
-              ),
-            ),
-          ),
       ],
     );
   }
