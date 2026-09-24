@@ -13,7 +13,11 @@ EKFWrapper::EKFWrapper(EKF* pEKF) : Node("ins_gps"), mpEKF(pEKF) {
         "GNSS", 10, std::bind(&EKFWrapper::GpsCallback, this, std::placeholders::_1));
     yaw_subscriber = this->create_subscription<std_msgs::msg::Float32>(
         "setyaw_topic", 10, std::bind(&EKFWrapper::InitYawCallback, this, std::placeholders::_1));
-    state_publisher = this->create_publisher<autorccar_interfaces::msg::NavState>("nav_topic", 10);
+
+    this->declare_parameter<int>("nav.state_deadline", 200);
+    int nav_state_deadline = this->get_parameter("nav.state_deadline").as_int();
+    state_publisher = this->create_publisher<autorccar_interfaces::msg::NavState>(
+        "nav_topic", rclcpp::QoS(10).deadline(std::chrono::milliseconds(nav_state_deadline)));
 }
 
 void EKFWrapper::ImuCallback(const autorccar_interfaces::msg::Imu& msg) {

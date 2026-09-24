@@ -1,0 +1,4 @@
+/**:
+  ros__parameters:
+    nav:
+      state_deadline: 200 # [ms]

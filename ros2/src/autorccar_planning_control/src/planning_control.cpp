@@ -55,7 +55,10 @@ void PlanningControl::SetGlobalPath(std::vector<Point>&& global_path, std::vecto
 
 void PlanningControl::SetCurrentTargetSpeed(const double speed) { current_target_speed_ = speed; }
 
-void PlanningControl::SetCurrentState(const State& state) { current_state_ = state; }
+void PlanningControl::SetCurrentState(const State& state) {
+    current_state_ = state;
+    current_state_.vel = state.quat.conjugate() * state.vel;
+}
 
 void PlanningControl::SetBoundingBoxes(std::vector<BoundingBox>&& bounding_boxes) {
     frenet_optimal_path_->SetBoundingBoxes(std::move(bounding_boxes));
@@ -64,6 +67,7 @@ void PlanningControl::SetBoundingBoxes(std::vector<BoundingBox>&& bounding_boxes
 void PlanningControl::PlanOnce() {
     if (!got_global_path_) return;
     frenet_optimal_path_->Planning(global_path_, current_state_);
+    current_frenet_path_ = frenet_optimal_path_->GetCurrentFrenetPath();
 }
 
 bool PlanningControl::GoalReached(const State& state) const {
@@ -82,7 +86,6 @@ ControlCommand PlanningControl::GenerateMotionCommand() {
         return {0.0, 0.0};
     }
 
-    current_frenet_path_ = frenet_optimal_path_->GetCurrentFrenetPath();
     if (!frenet_optimal_path_->IsPathGenerated()) {
         std::cout << "frenet optimal path is not generated." << std::endl;
         return {0.0, 0.0};
