@@ -10,6 +10,7 @@ cmake_policy(SET CMP0074 NEW)
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
@@ -43,6 +44,7 @@ add_executable(costmap
 )
 ament_target_dependencies(costmap
   rclcpp
+  ament_index_cpp
   sensor_msgs
   nav_msgs
   std_msgs

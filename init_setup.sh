@@ -1,33 +1,36 @@
 #!/bin/bash
-### Dependencies
+### Dependencies (Ubuntu 24.04 / ROS 2 Jazzy)
+ROS_DISTRO=${ROS_DISTRO:-jazzy}
+cd "$(dirname "$0")"
 
 ## LIO-SAM (ros2)
-sudo apt install -y ros-humble-perception-pcl \
-  	   ros-humble-pcl-msgs \
-  	   ros-humble-vision-opencv \
-  	   ros-humble-xacro
+sudo apt install -y ros-${ROS_DISTRO}-perception-pcl \
+  	   ros-${ROS_DISTRO}-pcl-msgs \
+  	   ros-${ROS_DISTRO}-vision-opencv \
+  	   ros-${ROS_DISTRO}-xacro
 
 ## LIO-SAM (gtsam)
-sudo add-apt-repository ppa:borglab/gtsam-release-4.1
-sudo apt install -y libgtsam-dev libgtsam-unstable-dev
+# borglab PPA has no noble release; use the ROS-packaged GTSAM 4.2 instead
+sudo apt install -y ros-${ROS_DISTRO}-gtsam
 
 ## e-con camera
-sudo apt install v4l-utils
-sudo apt install ros-humble-gscam
+sudo apt install -y v4l-utils
+sudo apt install -y ros-${ROS_DISTRO}-gscam
 
 ## oCam
-sudo apt-get install libv4l-dev libudev-dev
+sudo apt-get install -y libv4l-dev libudev-dev
 
 ## GCS
-pip install numpy PyQt5 pyqtgraph
+# Ubuntu 24.04 blocks system-wide pip installs (PEP 668); use apt packages
+sudo apt install -y python3-numpy python3-pyqt5 python3-pyqtgraph
 
 ## Gamepad (DualSens)
-sudo apt install joystick
-sudo apt install ros-humble-joy
+sudo apt install -y joystick
+sudo apt install -y ros-${ROS_DISTRO}-joy
 
 ## CostMap
 sudo apt-get install -y libeigen3-dev libyaml-cpp-dev \
-		ros-humble-vision-msgs
+		ros-${ROS_DISTRO}-vision-msgs
 
 ## Livox-SDK2
 cd Livox-SDK2

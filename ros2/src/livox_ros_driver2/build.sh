@@ -3,6 +3,7 @@
 readonly VERSION_ROS1="ROS1"
 readonly VERSION_ROS2="ROS2"
 readonly VERSION_HUMBLE="humble"
+readonly VERSION_JAZZY="jazzy"
 
 pushd `pwd` > /dev/null
 cd `dirname $0`
@@ -14,7 +15,8 @@ ROS_HUMBLE=""
 # Set working ROS version
 if [ "$1" = "ROS2" ]; then
     ROS_VERSION=${VERSION_ROS2}
-elif [ "$1" = "humble" ]; then
+elif [ "$1" = "humble" ] || [ "$1" = "jazzy" ]; then
+    # Jazzy uses the same rosidl typesupport API as Humble (HUMBLE_ROS branch in CMakeLists.txt)
     ROS_VERSION=${VERSION_ROS2}
     ROS_HUMBLE=${VERSION_HUMBLE}
 elif [ "$1" = "ROS1" ]; then
