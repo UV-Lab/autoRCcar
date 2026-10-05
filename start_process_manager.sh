@@ -1,5 +1,5 @@
 #!/bin/bash
-source /opt/ros/humble/setup.bash
+source /opt/ros/jazzy/setup.bash
 source ~/autoRCcar/ros2/install/setup.bash
 eval "$(grep '^export GSCAM' ~/.bashrc)"
 sleep 3
