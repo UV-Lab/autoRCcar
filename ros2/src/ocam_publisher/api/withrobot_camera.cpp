@@ -26,6 +26,7 @@
  */
 
 #include "withrobot_camera.hpp"
+#include "frame_wait.hpp"
 
 
 using namespace Withrobot;
@@ -511,20 +512,7 @@ bool Camera::stop()
  */
 int Camera::get_frame(unsigned char* out_buffer, const unsigned int size, unsigned int timeout_sec)
 {
-    fd_set fds;
-    FD_ZERO(&fds);
-    FD_SET(fd, &fds);
-    struct timeval timeout;
-    timeout.tv_sec = timeout_sec;
-    timeout.tv_usec = 0;
-    int r = select(fd+1, &fds, NULL, NULL, &timeout);
-
-    if (r == -1) {
-        DBG_PERROR("Timeout");
-        exit(EXIT_FAILURE);
-    }
-
-    if (r == 0) {
+    if (!wait_for_frame(fd, timeout_sec)) {
         return -1;
     }
 
@@ -936,4 +924,3 @@ int Camera::query_ioctl(int current_ctrl, struct v4l2_queryctrl* ctrl)
 
     return(ret);
 }
-

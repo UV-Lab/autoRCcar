@@ -1,0 +1,41 @@
+services:
+  rviz:
+    image: osrf/ros:humble-desktop-full
+    init: true
+    network_mode: host
+    gpus: all
+    user: "${RVIZ_UID:?Run via run_rviz_docker.sh}:${RVIZ_GID:?Run via run_rviz_docker.sh}"
+    environment:
+      HOME: /tmp
+      DISPLAY: "${DISPLAY:?DISPLAY must be set from the desktop X11 session}"
+      XAUTHORITY: /tmp/.Xauthority
+      ROS_DOMAIN_ID: "${ROS_DOMAIN_ID:-0}"
+      ROS_LOCALHOST_ONLY: "0"
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: graphics,display,utility
+      QT_X11_NO_MITSHM: "1"
+    volumes:
+      - type: bind
+        source: /tmp/.X11-unix
+        target: /tmp/.X11-unix
+        read_only: true
+      - type: bind
+        source: "${XAUTHORITY:?XAUTHORITY must point to the desktop X11 cookie}"
+        target: /tmp/.Xauthority
+        read_only: true
+      - type: bind
+        source: "${RVIZ_WORKSPACE_DIR:-${HOME}/packages}"
+        target: /workspace
+        bind:
+          create_host_path: false
+      - type: bind
+        source: "${RVIZ_CONFIG:-./ros2/src/ocam_publisher/config/rviz/image_topic_rviz_15hz.rviz}"
+        target: /rviz-config/default.rviz
+        read_only: true
+        bind:
+          create_host_path: false
+    working_dir: /workspace
+    command:
+      - rviz2
+      - -d
+      - /rviz-config/default.rviz

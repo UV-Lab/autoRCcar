@@ -21,6 +21,7 @@
 #include <opencv2/opencv.hpp>
 #include <vector>
 
+#include "image_pipeline.hpp"
 #include "api/withrobot_camera.hpp" /* withrobot camera API */
 
 /*
@@ -73,38 +74,26 @@ int main(int argc, char* argv[]) {
 
     Withrobot::Camera camera(devPath);
 
-    /* USB 3.0 */
-    /* bayer RBG 1280 x 720 60 fps */
-    // camera.set_format(1280, 720, Withrobot::fourcc_to_pixformat('G','B','G','R'), 1, 60);
-    camera.set_format(640, 480, Withrobot::fourcc_to_pixformat('G', 'B', 'G', 'R'), 1, 30);
-
-    /* bayer RBG 1280 x 960 45 fps */
-    // camera.set_format(1280, 960, Withrobot::fourcc_to_pixformat('G','B','G','R')), 1, 45);
-
-    /* bayer RBG 320 x 240 160 fps */
-    // camera.set_format(320, 240, Withrobot::fourcc_to_pixformat('G','B','G','R'), 1, 160);
-
-    /* bayer RBG 640 x 480 80 fps */
-    // camera.set_format(640, 480, Withrobot::fourcc_to_pixformat('G','B','G','R')'), 1, 80);
-
-    /* USB 2.0 */
-    /* bayer RBG 1280 x 720 30 fps */
-    // camera.set_format(1280, 720, Withrobot::fourcc_to_pixformat(''G','B','G','R'), 1, 30);
-
-    /* bayer RBG 1280 x 960 22.5 fps */
-    // camera.set_format(1280, 960, Withrobot::fourcc_to_pixformat(''G','B','G','R'), 2, 45);
-
-    /* bayer RBG 320 x 240 160 fps */
-    // camera.set_format(320, 240, Withrobot::fourcc_to_pixformat(''G','B','G','R'), 1, 160);
-
-    /* bayer RBG 640 x 480 80 fps */
-    // camera.set_format(640, 480, Withrobot::fourcc_to_pixformat(''G','B','G','R'), 1, 80);
+    const int capture_width = 1280;
+    const int capture_height = 960;
+    const int output_width = 640;
+    const int output_height = 480;
+    const int fps = 30;
+    const unsigned int grbg_format = Withrobot::fourcc_to_pixformat('G', 'R', 'B', 'G');
+    if (!camera.set_format(capture_width, capture_height, grbg_format, 1, fps)) {
+        std::cerr << "[Error]: failed to request 1280x960 GRBG at 30 fps" << std::endl;
+        return -1;
+    }
 
     /*
      * get current camera format (image size and frame rate)
      */
     Withrobot::camera_format camFormat;
-    camera.get_current_format(camFormat);
+    if (!camera.get_current_format(camFormat) || camFormat.width != static_cast<unsigned int>(capture_width) ||
+        camFormat.height != static_cast<unsigned int>(capture_height) || camFormat.pixformat != grbg_format) {
+        std::cerr << "[Error]: camera did not negotiate 1280x960 GRBG" << std::endl;
+        return -1;
+    }
 
     /*
      * Print infomations
@@ -126,21 +115,29 @@ int main(int argc, char* argv[]) {
      *
      */
 
-    const int32_t INTI_EXPOSURE_ABS = 130;
-    camera.set_control("Exposure Time, Absolute", INTI_EXPOSURE_ABS);
-
-    const int32_t INIT_BRIGHTNESS = 110;
-    camera.set_control("Gain", INIT_BRIGHTNESS);
-
+    const int32_t INTI_EXPOSURE_ABS = 128;
+    const int32_t INIT_BRIGHTNESS = 128;
     // 1 - Manual mode, 3 - Apeture priority mode
     // see v4l2-ctl -d[#] --all
     const int32_t INTI_AUTO_EXPOSURE = 1;
-    const auto auto_exposure = camera.get_control("Auto Exposure");
-    camera.set_control("Auto Exposure", 1);
+    if (!camera.set_control("Auto Exposure", INTI_AUTO_EXPOSURE) ||
+        !camera.set_control("Exposure Time, Absolute", INTI_EXPOSURE_ABS) ||
+        !camera.set_control("Gain", INIT_BRIGHTNESS)) {
+        std::cerr << "[Error]: failed to configure camera controls" << std::endl;
+        return -1;
+    }
 
-    std::cout << "Current Gain: " << camera.get_control("Gain") << std::endl;
-    std::cout << "Current Exposure Time: " << camera.get_control("Exposure Time, Absolute") << std::endl;
-    std::cout << "Current Auto Exposure Mode: " << camera.get_control("Auto Exposure") << std::endl;
+    const int auto_exposure = camera.get_control("Auto Exposure");
+    const int exposure = camera.get_control("Exposure Time, Absolute");
+    const int gain = camera.get_control("Gain");
+    if (auto_exposure != INTI_AUTO_EXPOSURE || exposure != INTI_EXPOSURE_ABS || gain != INIT_BRIGHTNESS) {
+        std::cerr << "[Error]: camera controls differ from requested baseline" << std::endl;
+        return -1;
+    }
+
+    std::cout << "Current Gain: " << gain << std::endl;
+    std::cout << "Current Exposure Time: " << exposure << std::endl;
+    std::cout << "Current Auto Exposure Mode: " << auto_exposure << std::endl;
 
     /*
      * Start streaming
@@ -155,7 +152,8 @@ int main(int argc, char* argv[]) {
      */
     std::string windowName = camName + " " + camSerialNumber;
     cv::Mat srcImg(cv::Size(camFormat.width, camFormat.height), CV_8UC1);
-    cv::Mat colorImg(cv::Size(camFormat.width, camFormat.height), CV_8UC3);
+    cv::Mat colorImg;
+    const cv::Size output_size(output_width, output_height);
     cv::namedWindow(windowName.c_str());
 
     /*
@@ -175,7 +173,7 @@ int main(int argc, char* argv[]) {
             continue;
         }
 
-        cv::cvtColor(srcImg, colorImg, cv::COLOR_BayerGB2BGR);
+        ocam::demosaic_and_resize(srcImg, colorImg, cv::COLOR_BayerGB2BGR, output_size);
         /* Show image */
         cv::imshow(windowName.c_str(), colorImg);
         char key = cv::waitKey(1);

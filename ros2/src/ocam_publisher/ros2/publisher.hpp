@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <filesystem>
-#include <opencv2/highgui.hpp>
 #include <opencv2/opencv.hpp>
 #include <string>
 #include <vector>
@@ -8,10 +7,6 @@
 #include "api/withrobot_camera.hpp" /* withrobot camera API */
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/image.hpp"
-
-// Custom signal handler is used since get_frame() of the api does not seem
-// to work well with ros2's signal handler
-void sigint_handler(int signal_value) { (void)signal_value; }
 
 bool find_v4l_device_path(std::string &devPath) {
     if (!std::filesystem::exists("/dev/v4l/by-id")) return false;
@@ -60,36 +55,42 @@ class ImagePublisher : public rclcpp::Node {
          *	[2] "8-bit Greyscale 320 x 240 160 fps"
          * 	[3] "8-bit Greyscale 640 x 480 80 fps"
          */
-        declare_parameter("Width", 640);
-        declare_parameter("Height", 480);
+        // native_downsample: 1280x960 GRBG -> 640x480 rgb8.
+        // hardware_binned: 640x480 GRBG -> 640x480 rgb8.
+        declare_parameter("capture_mode", "native_downsample");
+        declare_parameter("OutputWidth", 640);
+        declare_parameter("OutputHeight", 480);
         declare_parameter("FPS", 30);
+        declare_parameter("frame_timeout_sec", 5.0);
+        declare_parameter("frame_id", "ocam_optical_frame");
 
         // See v4l2-ctl -d[#] --all to check control options
-        // "Gain"(default[min, step, max]) : 64(64 [0, 1, 127])
-        declare_parameter("Brightness", 110);
+        // "Gain" (range reported by this camera: 0 to 255)
+        declare_parameter("Brightness", 128);
         // "Exposure (Absolute)", (default[min, step, max]) : 39(39 [1, 1, 625])
-        declare_parameter("Exposure", 130);
+        declare_parameter("Exposure", 128);
         declare_parameter("Auto exposure mode",
                           1);  // 1 - Manual mode, 3 - Apeture priority mode
+
+        frame_id_ = get_parameter("frame_id").as_string();
     }
 
     void publish_image(const cv::Mat &img) {
         sensor_msgs::msg::Image msg;
-        msg.header.frame_id = count_++;
+        msg.header.stamp = now();
+        msg.header.frame_id = frame_id_;
         msg.height = img.rows;
         msg.width = img.cols;
         msg.step = img.cols * img.elemSize();
         msg.encoding = "rgb8";
 
         const uint32_t size = img.total() * img.elemSize();
-        msg.data.resize(size);
-        memcpy(&msg.data[0], img.data, size);
+        msg.data.assign(img.data, img.data + size);
 
         publisher_->publish(msg);
     }
 
-    int32_t count_ = 0;
-
    private:
+    std::string frame_id_;
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr publisher_;
 };

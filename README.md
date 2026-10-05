@@ -12,7 +12,7 @@ Run `build_ros2.sh` for the first build. It correctly builds the Livox package.
 ## Launch
 #### RC Car
 ```bash
-ros2 launch ocam_publisher ocam.launch.py
+ros2 launch ocam_publisher ocam_publish.launch.py
 
 ros2 run gscam gscam_node
 
