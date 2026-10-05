@@ -32,6 +32,9 @@ sudo apt install -y ros-${ROS_DISTRO}-joy
 sudo apt-get install -y libeigen3-dev libyaml-cpp-dev \
 		ros-${ROS_DISTRO}-vision-msgs
 
+## Rosbridge
+sudo apt-get install -y ros-${ROS_DISTRO}-rosbridge-suite
+
 ## Livox-SDK2
 cd Livox-SDK2
 if [ -d "build" ]; then
