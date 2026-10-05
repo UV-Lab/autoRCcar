@@ -14,6 +14,9 @@ ROS 2 interface (replaces the serial link to the vehicle MCU)
                                         speed [m/s], steering_angle [rad] after hardware_control clamping
   sub gcs/command, teleop/command       std_msgs/Int8, stop commands zero the vehicle
                                         (same as the MCU receiving a stop drive command)
+  pub IMU                               autorccar_interfaces/Imu, 100 Hz, FRD body frame
+  pub GNSS                              autorccar_interfaces/Gnss, 5 Hz, WGS84 ECEF
+                                        (replaces autorccar_ubloxf9r, see rh818_sensors.py)
 
 Usage (from the repository root, ROS 2 workspace must be sourced for autorccar_interfaces)
   source ros2/install/setup.bash
@@ -29,16 +32,17 @@ Options
   --headless          Run without a window
   --duration SEC      Simulation time to run [s]. 0 = until the window is closed (GUI only).
                       Default: 0 in GUI mode, 3 in headless mode
-  --physics-hz HZ     Physics steps per second (default 120)
+  --physics-hz HZ     Physics steps per second, multiple of 100 (default 200)
   --usd PATH          Vehicle asset path (default ../assets/autoRCcar_RH818.usda)
   --no-play           GUI only: build the scene but do not start the timeline
-  --no-ros2           Do not subscribe to ROS 2 commands
+  --no-ros2           Do not use ROS 2 (no drive commands, no IMU/GNSS topics)
 
 Notes
 - The vehicle asset has no ground or PhysicsScene; this script provides both.
 - The asset places base_link at axle height (z = 0.055 m), so the vehicle root is spawned at z = 0
   plus a small drop height to avoid initial penetration.
 - Like the real ESC/servo, the last received command is held until a new one arrives.
+- The sim world frame is ENU (X = east, Y = north, Z = up); the vehicle starts heading east.
 """
 
 import argparse
@@ -50,14 +54,14 @@ import time
 parser = argparse.ArgumentParser(description="Run RH818 on a flat ground plane in Isaac Sim")
 parser.add_argument("--headless", action="store_true", help="run without a window")
 parser.add_argument("--duration", type=float, default=None, help="simulation time to run [s], 0 = forever")
-parser.add_argument("--physics-hz", type=float, default=120.0, help="physics steps per second")
+parser.add_argument("--physics-hz", type=float, default=200.0, help="physics steps per second")
 parser.add_argument(
     "--usd",
     default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "autoRCcar_RH818.usda"),
     help="vehicle asset path",
 )
 parser.add_argument("--no-play", action="store_true", help="GUI only: do not start the timeline")
-parser.add_argument("--no-ros2", action="store_true", help="do not subscribe to ROS 2 commands")
+parser.add_argument("--no-ros2", action="store_true", help="do not use ROS 2")
 args, _ = parser.parse_known_args()
 
 if args.duration is None:
@@ -79,6 +83,7 @@ from pxr import Gf, PhysxSchema, UsdGeom, UsdPhysics
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import rh818_ackermann as ackermann
+import rh818_sensors as sensors
 
 
 # =============================================================================
@@ -134,8 +139,13 @@ def build_scene(usd_path):
     stage_utils.add_reference_to_stage(usd_path=usd_path, path=CAR_PATH)
     UsdGeom.XformCommonAPI(stage.GetPrimAtPath(CAR_PATH)).SetTranslate(Gf.Vec3d(*SPAWN_POS))
 
+    # IMU board
+    app_utils.enable_extension("isaacsim.sensors.experimental.physics")
+    imu_path = sensors.create_imu_prim(CAR_PATH)
+
     print(f"[RH818] Vehicle asset : {usd_path}")
     print(f"[RH818] Physics       : {args.physics_hz:.0f} Hz")
+    return imu_path
 
 
 def wait_stage_loading():
@@ -260,9 +270,10 @@ class RealTimePacer:
 # =============================================================================
 
 ros2 = None
+sensor_pub = None
 
 try:
-    build_scene(args.usd)
+    imu_path = build_scene(args.usd)
     wait_stage_loading()
 
     car = Articulation(CAR_PATH)
@@ -275,6 +286,8 @@ try:
     driver = VehicleDriver(car)
     if not args.no_ros2:
         ros2 = Ros2CommandInterface(driver)
+        gnss_offset = sensors.get_gnss_offset(stage_utils.get_current_stage(), CAR_PATH)
+        sensor_pub = sensors.SensorPublisher(ros2.node, car, imu_path, gnss_offset, args.physics_hz)
 
     timeline = omni.timeline.get_timeline_interface()
     pacer = RealTimePacer()
@@ -304,6 +317,8 @@ try:
             break
 
 finally:
+    if sensor_pub is not None:
+        sensor_pub.shutdown()
     if ros2 is not None:
         ros2.shutdown()
     simulation_app.close()
