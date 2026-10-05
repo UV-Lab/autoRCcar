@@ -1,0 +1,430 @@
+"""
+Park test field for LiDAR SLAM / autonomous driving tests -> Isaac Sim 6.x environment USD generator
+Output: isaacsim/assets/park_30m.usda (environment only, no vehicle and no PhysicsScene)
+
+Layout (world frame ENU: X = east, Y = north, Z = up, meters; origin = center of the open area)
+  ground     30 m x 30 m grass, x, y in [-15, 15], top surface at z = 0
+  open area  18 m x 18 m packed dirt in the middle, x, y in [-9, 9] (driving area)
+  north      one-story building 14 m x 5 m x 3.6 m, windows and door facing the open area
+  east       paved rest area with 3 shade canopies and 2 benches under each
+  around     trees on the remaining west / south side and the corners (2 staggered rows)
+
+Every solid object has a static collider (no rigid body), so the physics raycast MID-360
+(rh818_livox.py) sees it. Simple shapes use analytic USD primitives (Cube / Cylinder / Sphere / Cone),
+canopy roofs use a convex hull mesh. The ground collider is a collision plane at z = 0 (like
+GroundPlane; the analytic cylinder wheels sink about 3 cm into a large box collider). The grass slab and
+the overlay surfaces (dirt, paving, 1 mm above the grass) are visual only.
+
+Usage (from the repository root)
+  ~/isaacsim/python.sh isaacsim/scripts/build_park_usd.py [output path]
+  ~/isaacsim/python.sh isaacsim/scripts/run_sim.py --env isaacsim/assets/park_30m.usda
+
+Notes
+- Tree positions use a fixed random seed (TREE_SEED), so the output is reproducible.
+- The scene includes a dome light and a distant light (sun). Opened on its own in the GUI, it has no
+  PhysicsScene; Isaac Sim creates a default one on play, run_sim.py adds its own.
+"""
+
+import math
+import os
+import sys
+
+from isaacsim import SimulationApp
+
+# Create the app before importing pxr so that the USD schemas are registered
+simulation_app = SimulationApp({"headless": True})
+
+try:
+    import numpy as np
+    from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux, UsdPhysics, UsdShade, Vt
+
+    OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "assets", "park_30m.usda"
+    )
+    OUT = os.path.abspath(OUT)
+
+    # =========================================================================
+    # Parameters
+    # =========================================================================
+
+    FIELD_HALF = 15.0           # ground half size [m]
+    GROUND_THICK = 0.2
+    OPEN_HALF = 9.0             # open area (dirt) half size [m]
+    OVERLAY_Z = 0.001           # visual overlay height above the ground collider [m]
+
+    # Building (north side)
+    BLD_CENTER = (0.0, 12.0)    # footprint center (x, y)
+    BLD_SIZE = (14.0, 5.0)      # footprint (x, y) [m]
+    BLD_HEIGHT = 3.3            # wall height up to the roof slab
+    WALL_T = 0.25
+    ROOF_T = 0.2
+    PARAPET_H = 0.3
+    # Openings along each wall, u = position along the wall from its center [m]
+    #   (kind, u, width, z0, z1)
+    WIN = (0.9, 2.2)            # window sill / head height
+    BLD_OPENINGS = {
+        "south": [("window", -5.0, 1.8, *WIN), ("window", -2.2, 1.8, *WIN), ("door", 0.6, 1.2, 0.0, 2.2),
+                  ("window", 3.2, 1.8, *WIN), ("window", 5.6, 1.2, *WIN)],
+        "north": [("window", -4.5, 1.2, *WIN), ("door", -1.0, 1.0, 0.0, 2.1), ("window", 3.5, 1.2, *WIN)],
+        "west": [("window", 0.0, 1.5, *WIN)],
+        "east": [("window", -0.8, 1.0, 1.4, 2.2)],
+    }
+
+    # Rest area (east side)
+    REST_AREA = ((10.0, -8.5), (14.6, 8.5))   # paved area (x0, y0), (x1, y1)
+    CANOPY_X = 12.3
+    CANOPY_YS = (-5.5, 0.0, 5.5)
+    CANOPY_SIZE = 3.4           # square canopy edge length
+    CANOPY_EAVE = 2.4           # roof edge height
+    CANOPY_PEAK = 3.1           # pyramid roof top height
+    BENCH_X = 12.7              # benches face west (toward the open area)
+    BENCH_DY = 0.9              # bench offset from the canopy center along y
+
+    # Trees
+    TREE_SEED = 7
+    TREE_ROWS = [(11.2, 2.8, 0.0), (13.5, 3.2, 0.5)]   # (square ring half size, spacing, phase [fraction])
+    TREE_JITTER = 0.35
+    TREE_KEEP_OUT = [
+        ((-7.8, 9.0), (7.8, 15.0)),        # building + its surroundings
+        ((9.6, -8.9), (15.0, 8.9)),        # rest area
+    ]
+    CONIFER_RATIO = 0.3
+
+    # =========================================================================
+    # Stage
+    # =========================================================================
+
+    stage = Usd.Stage.CreateNew(OUT) if not os.path.exists(OUT) else Usd.Stage.Open(OUT)
+    stage.GetRootLayer().Clear()
+    UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
+    UsdGeom.SetStageMetersPerUnit(stage, 1.0)
+    UsdPhysics.SetStageKilogramsPerUnit(stage, 1.0)
+    world = UsdGeom.Xform.Define(stage, "/World")
+    stage.SetDefaultPrim(world.GetPrim())
+    stage.GetRootLayer().documentation = (
+        "Park test field (30 m x 30 m) for LiDAR SLAM and autonomous driving tests. "
+        "Generated by isaacsim/scripts/build_park_usd.py, do not edit by hand."
+    )
+
+    # ---------------- Materials ----------------
+    UsdGeom.Scope.Define(stage, "/World/Looks")
+    MATS = {}
+
+    def material(name, rgb, rough=0.7, metal=0.0, opacity=1.0):
+        m = UsdShade.Material.Define(stage, f"/World/Looks/{name}")
+        sh = UsdShade.Shader.Define(stage, f"/World/Looks/{name}/Shader")
+        sh.CreateIdAttr("UsdPreviewSurface")
+        sh.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(*rgb))
+        sh.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(rough)
+        sh.CreateInput("metallic", Sdf.ValueTypeNames.Float).Set(metal)
+        if opacity < 1.0:
+            sh.CreateInput("opacity", Sdf.ValueTypeNames.Float).Set(opacity)
+        m.CreateSurfaceOutput().ConnectToSource(sh.ConnectableAPI(), "surface")
+        MATS[name] = (m, rgb)
+
+    material("grass", (0.24, 0.42, 0.16), 0.95)
+    material("dirt", (0.60, 0.50, 0.36), 0.95)
+    material("paving", (0.62, 0.60, 0.57), 0.85)
+    material("concrete", (0.80, 0.77, 0.70), 0.8)
+    material("roof", (0.30, 0.30, 0.32), 0.7)
+    material("trim", (0.45, 0.45, 0.47), 0.6)
+    material("glass", (0.35, 0.50, 0.60), 0.05, 0.2, opacity=0.45)
+    material("door", (0.40, 0.26, 0.16), 0.6)
+    material("wood", (0.62, 0.42, 0.24), 0.7)
+    material("metal", (0.18, 0.19, 0.20), 0.4, 0.7)
+    material("post", (0.85, 0.85, 0.83), 0.5, 0.3)
+    material("fabric", (0.16, 0.45, 0.32), 0.9)
+    material("bark", (0.33, 0.24, 0.16), 0.95)
+    material("leaf_a", (0.18, 0.40, 0.14), 0.9)
+    material("leaf_b", (0.26, 0.48, 0.18), 0.9)
+    material("leaf_c", (0.14, 0.33, 0.12), 0.9)
+    material("conifer", (0.09, 0.26, 0.13), 0.9)
+
+    # ---------------- Primitive helpers ----------------
+    def finish(geom, mat, collide):
+        m, rgb = MATS[mat]
+        geom.CreateDisplayColorAttr([Gf.Vec3f(*rgb)])
+        UsdShade.MaterialBindingAPI.Apply(geom.GetPrim()).Bind(m)
+        if collide:
+            UsdPhysics.CollisionAPI.Apply(geom.GetPrim())
+        return geom
+
+    def group(path, pos=(0.0, 0.0, 0.0), yaw=0.0):
+        x = UsdGeom.Xform.Define(stage, path)
+        x.AddTranslateOp().Set(Gf.Vec3d(*pos))
+        if yaw:
+            x.AddRotateZOp().Set(yaw)
+        return x
+
+    def box(path, center, size, mat, collide=True, rot=None):
+        """Axis-aligned box (optionally rotated by rot = (rx, ry, rz) degrees about its center)."""
+        g = UsdGeom.Cube.Define(stage, path)
+        g.CreateSizeAttr(1.0)
+        g.AddTranslateOp().Set(Gf.Vec3d(*center))
+        if rot is not None:
+            g.AddRotateXYZOp().Set(Gf.Vec3f(*rot))
+        g.AddScaleOp().Set(Gf.Vec3f(*size))
+        return finish(g, mat, collide)
+
+    def cylinder(path, center, radius, height, mat, collide=True):
+        g = UsdGeom.Cylinder.Define(stage, path)
+        g.CreateRadiusAttr(radius)
+        g.CreateHeightAttr(height)
+        g.CreateAxisAttr(UsdGeom.Tokens.z)
+        g.AddTranslateOp().Set(Gf.Vec3d(*center))
+        return finish(g, mat, collide)
+
+    def sphere(path, center, radius, mat, scale_z=1.0, collide=True):
+        g = UsdGeom.Sphere.Define(stage, path)
+        g.CreateRadiusAttr(radius)
+        g.AddTranslateOp().Set(Gf.Vec3d(*center))
+        if scale_z != 1.0:
+            g.AddScaleOp().Set(Gf.Vec3f(1.0, 1.0, scale_z))
+        return finish(g, mat, collide)
+
+    def cone(path, center, radius, height, mat, collide=True):
+        g = UsdGeom.Cone.Define(stage, path)
+        g.CreateRadiusAttr(radius)
+        g.CreateHeightAttr(height)
+        g.CreateAxisAttr(UsdGeom.Tokens.z)
+        g.AddTranslateOp().Set(Gf.Vec3d(*center))
+        return finish(g, mat, collide)
+
+    def pyramid(path, z0, half, height, mat, thick=0.04):
+        """Square pyramid roof shell centered on the parent origin, base at z0 (convex hull collider)."""
+        b = [(-half, -half), (half, -half), (half, half), (-half, half)]
+        pts = [(x, y, z0) for x, y in b] + [(x, y, z0 + thick) for x, y in b] + [(0.0, 0.0, z0 + height)]
+        # bottom face, 4 thin edge faces, 4 slope faces (outward winding)
+        faces = [(3, 2, 1, 0)]
+        faces += [(i, (i + 1) % 4, (i + 1) % 4 + 4, i + 4) for i in range(4)]
+        faces += [(i + 4, (i + 1) % 4 + 4, 8) for i in range(4)]
+        g = UsdGeom.Mesh.Define(stage, path)
+        g.CreatePointsAttr(Vt.Vec3fArray([Gf.Vec3f(*p) for p in pts]))
+        g.CreateFaceVertexCountsAttr(Vt.IntArray([len(f) for f in faces]))
+        g.CreateFaceVertexIndicesAttr(Vt.IntArray([i for f in faces for i in f]))
+        g.CreateSubdivisionSchemeAttr("none")
+        g.CreateDoubleSidedAttr(True)
+        g.CreateExtentAttr(Vt.Vec3fArray([Gf.Vec3f(-half, -half, z0), Gf.Vec3f(half, half, z0 + height)]))
+        finish(g, mat, True)
+        UsdPhysics.MeshCollisionAPI.Apply(g.GetPrim()).CreateApproximationAttr(UsdPhysics.Tokens.convexHull)
+        return g
+
+    # =========================================================================
+    # Lights
+    # =========================================================================
+
+    UsdGeom.Scope.Define(stage, "/World/Lights")
+    dome = UsdLux.DomeLight.Define(stage, "/World/Lights/DomeLight")
+    dome.CreateIntensityAttr(800.0)
+    sun = UsdLux.DistantLight.Define(stage, "/World/Lights/Sun")
+    sun.CreateIntensityAttr(2500.0)
+    sun.CreateAngleAttr(0.53)
+    sun.AddRotateXYZOp().Set(Gf.Vec3f(40.0, 0.0, -30.0))   # afternoon sun from the south-west
+
+    # =========================================================================
+    # Ground
+    # =========================================================================
+
+    group("/World/Park")
+    group("/World/Park/Ground")
+    plane = UsdGeom.Plane.Define(stage, "/World/Park/Ground/collision_plane")
+    plane.CreateAxisAttr(UsdGeom.Tokens.z)
+    plane.CreateWidthAttr(2 * FIELD_HALF)
+    plane.CreateLengthAttr(2 * FIELD_HALF)
+    plane.CreatePurposeAttr(UsdGeom.Tokens.guide)
+    UsdPhysics.CollisionAPI.Apply(plane.GetPrim())
+    box("/World/Park/Ground/grass", (0.0, 0.0, -GROUND_THICK / 2),
+        (2 * FIELD_HALF, 2 * FIELD_HALF, GROUND_THICK), "grass", collide=False)
+
+    def overlay(name, p0, p1, mat):
+        cx, cy = (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2
+        box(f"/World/Park/Ground/{name}", (cx, cy, OVERLAY_Z / 2),
+            (p1[0] - p0[0], p1[1] - p0[1], OVERLAY_Z), mat, collide=False)
+
+    overlay("open_area", (-OPEN_HALF, -OPEN_HALF), (OPEN_HALF, OPEN_HALF), "dirt")
+    overlay("rest_area_paving", *REST_AREA, "paving")
+    bx, by = BLD_CENTER
+    bw, bd = BLD_SIZE
+    overlay("building_apron", (bx - bw / 2 - 0.6, by - bd / 2 - 0.6), (bx + bw / 2 + 0.6, by - bd / 2), "paving")
+
+    # =========================================================================
+    # Building (north)
+    # =========================================================================
+
+    BLD = "/World/Park/Building"
+    group(BLD, (bx, by, 0.0))
+    group(f"{BLD}/Walls")
+    group(f"{BLD}/Openings")
+
+    # Wall definitions in the building frame: name -> (axis of the wall, fixed coordinate, length, outward sign)
+    hx, hy = bw / 2, bd / 2
+    WALLS = {
+        "south": ("x", -hy + WALL_T / 2, bw, -1.0),
+        "north": ("x", hy - WALL_T / 2, bw, 1.0),
+        "west": ("y", -hx + WALL_T / 2, bd - 2 * WALL_T, -1.0),
+        "east": ("y", hx - WALL_T / 2, bd - 2 * WALL_T, 1.0),
+    }
+
+    def wall_box(wall, name, u0, u1, z0, z1, mat="concrete", depth=WALL_T, offset=0.0, collide=True):
+        """Box spanning [u0, u1] along the wall and [z0, z1] in height, offset outward from the wall center."""
+        axis, fixed, _, sign = WALLS[wall]
+        u, length, h = (u0 + u1) / 2, u1 - u0, z1 - z0
+        n = fixed + sign * offset
+        if axis == "x":
+            center, size = (u, n, (z0 + z1) / 2), (length, depth, h)
+        else:
+            center, size = (n, u, (z0 + z1) / 2), (depth, length, h)
+        return box(f"{BLD}/{name}", center, size, mat, collide)
+
+    for wall, (axis, fixed, length, sign) in WALLS.items():
+        openings = sorted(BLD_OPENINGS.get(wall, []), key=lambda o: o[1])
+        u = -length / 2
+        for i, (kind, uc, w, z0, z1) in enumerate(openings):
+            a, b = uc - w / 2, uc + w / 2
+            wall_box(wall, f"Walls/{wall}_pier{i}", u, a, 0.0, BLD_HEIGHT)
+            if z0 > 0.0:
+                wall_box(wall, f"Walls/{wall}_below{i}", a, b, 0.0, z0)
+            wall_box(wall, f"Walls/{wall}_above{i}", a, b, z1, BLD_HEIGHT)
+            # Pane set back to the wall center, frame lintel and sill sticking out a little
+            if kind == "window":
+                wall_box(wall, f"Openings/{wall}_glass{i}", a, b, z0, z1, "glass", depth=0.02)
+                wall_box(wall, f"Openings/{wall}_sill{i}", a - 0.05, b + 0.05, z0 - 0.05, z0,
+                         "trim", depth=0.12, offset=WALL_T / 2)
+            else:
+                wall_box(wall, f"Openings/{wall}_door{i}", a, b, z0, z1, "door", depth=0.05,
+                         offset=-WALL_T / 4)
+            wall_box(wall, f"Openings/{wall}_lintel{i}", a - 0.05, b + 0.05, z1, z1 + 0.06,
+                     "trim", depth=0.08, offset=WALL_T / 2)
+            u = b
+        wall_box(wall, f"Walls/{wall}_pier{len(openings)}", u, length / 2, 0.0, BLD_HEIGHT)
+
+    # Flat roof slab with a small overhang, parapet on top
+    group(f"{BLD}/Roof")
+    ov = 0.3
+    box(f"{BLD}/Roof/slab", (0.0, 0.0, BLD_HEIGHT + ROOF_T / 2), (bw + 2 * ov, bd + 2 * ov, ROOF_T), "roof")
+    pz = BLD_HEIGHT + ROOF_T + PARAPET_H / 2
+    pt = 0.15
+    box(f"{BLD}/Roof/parapet_s", (0.0, -hy - ov + pt / 2, pz), (bw + 2 * ov, pt, PARAPET_H), "trim")
+    box(f"{BLD}/Roof/parapet_n", (0.0, hy + ov - pt / 2, pz), (bw + 2 * ov, pt, PARAPET_H), "trim")
+    box(f"{BLD}/Roof/parapet_w", (-hx - ov + pt / 2, 0.0, pz), (pt, bd + 2 * ov - 2 * pt, PARAPET_H), "trim")
+    box(f"{BLD}/Roof/parapet_e", (hx + ov - pt / 2, 0.0, pz), (pt, bd + 2 * ov - 2 * pt, PARAPET_H), "trim")
+
+    # Details that give the lidar more structure: entrance step and canopy, outdoor AC unit, downpipes
+    group(f"{BLD}/Details")
+    door_u = [o for o in BLD_OPENINGS["south"] if o[0] == "door"][0][1]
+    box(f"{BLD}/Details/entrance_step", (door_u, -hy - 0.35, 0.06), (2.0, 0.7, 0.12), "concrete")
+    box(f"{BLD}/Details/entrance_canopy", (door_u, -hy - 0.6, 2.55), (2.4, 1.2, 0.12), "trim")
+    box(f"{BLD}/Details/ac_unit", (hx + 0.35, 1.2, 0.35), (0.45, 0.85, 0.7), "post")
+    for i, (x, y) in enumerate([(-hx - 0.08, -hy - 0.08), (hx + 0.08, -hy - 0.08)]):
+        cylinder(f"{BLD}/Details/downpipe{i}", (x, y, (BLD_HEIGHT + ROOF_T) / 2), 0.05, BLD_HEIGHT + ROOF_T, "trim")
+
+    # =========================================================================
+    # Rest area (east): shade canopies and benches
+    # =========================================================================
+
+    REST = "/World/Park/RestArea"
+    group(REST)
+
+    def bench(path, pos, yaw):
+        """Park bench 1.6 m long, seat height 0.45 m. Local frame: length along x, front toward -y."""
+        group(path, pos, yaw)
+        box(f"{path}/seat", (0.0, 0.0, 0.43), (1.6, 0.42, 0.05), "wood")
+        box(f"{path}/back", (0.0, 0.22, 0.70), (1.6, 0.04, 0.32), "wood", rot=(-12.0, 0.0, 0.0))
+        for i, x in enumerate((-0.65, 0.65)):
+            box(f"{path}/leg{i}_front", (x, -0.17, 0.205), (0.06, 0.06, 0.41), "metal")
+            box(f"{path}/leg{i}_rear", (x, 0.19, 0.42), (0.06, 0.06, 0.84), "metal")
+            box(f"{path}/leg{i}_rail", (x, 0.01, 0.39), (0.05, 0.40, 0.04), "metal")
+
+    def canopy(path, pos):
+        """Square shade canopy: 4 posts, beam frame and a pyramid fabric roof."""
+        group(path, pos)
+        h = CANOPY_SIZE / 2 - 0.06
+        for i, (sx, sy) in enumerate([(-1, -1), (1, -1), (1, 1), (-1, 1)]):
+            box(f"{path}/post{i}", (sx * h, sy * h, CANOPY_EAVE / 2), (0.1, 0.1, CANOPY_EAVE), "post")
+        bz = CANOPY_EAVE - 0.06
+        box(f"{path}/beam_s", (0.0, -h, bz), (CANOPY_SIZE, 0.08, 0.12), "post")
+        box(f"{path}/beam_n", (0.0, h, bz), (CANOPY_SIZE, 0.08, 0.12), "post")
+        box(f"{path}/beam_w", (-h, 0.0, bz), (0.08, CANOPY_SIZE, 0.12), "post")
+        box(f"{path}/beam_e", (h, 0.0, bz), (0.08, CANOPY_SIZE, 0.12), "post")
+        pyramid(f"{path}/roof", CANOPY_EAVE, CANOPY_SIZE / 2 + 0.15, CANOPY_PEAK - CANOPY_EAVE, "fabric")
+
+    n_bench = 0
+    for i, cy in enumerate(CANOPY_YS):
+        canopy(f"{REST}/canopy{i}", (CANOPY_X, cy, 0.0))
+        for dy in (-BENCH_DY, BENCH_DY):
+            # yaw -90: bench front (local -y) faces world -x (west, toward the open area)
+            bench(f"{REST}/bench{n_bench}", (BENCH_X, cy + dy, 0.0), -90.0)
+            n_bench += 1
+
+    # =========================================================================
+    # Trees around the open area
+    # =========================================================================
+
+    TREES = "/World/Park/Trees"
+    group(TREES)
+    rng = np.random.default_rng(TREE_SEED)
+
+    def ring_points(s, spacing, phase):
+        """Points on a square ring of half size s, equally spaced along the perimeter."""
+        perimeter = 8.0 * s
+        n = int(perimeter // spacing)
+        pts = []
+        for k in range(n):
+            d = (k + phase) * perimeter / n
+            side, t = int(d // (2 * s)), d % (2 * s) - s
+            pts.append([(t, -s), (s, t), (-t, s), (-s, -t)][side])
+        return pts
+
+    def kept_out(x, y, margin):
+        return any(p0[0] - margin < x < p1[0] + margin and p0[1] - margin < y < p1[1] + margin
+                   for p0, p1 in TREE_KEEP_OUT)
+
+    tree_pos = []
+    for s, spacing, phase in TREE_ROWS:
+        for x, y in ring_points(s, spacing, phase):
+            x += rng.uniform(-TREE_JITTER, TREE_JITTER)
+            y += rng.uniform(-TREE_JITTER, TREE_JITTER)
+            x, y = float(np.clip(x, -FIELD_HALF + 0.8, FIELD_HALF - 0.8)), float(np.clip(y, -FIELD_HALF + 0.8, FIELD_HALF - 0.8))
+            if not kept_out(x, y, 0.0):
+                tree_pos.append((x, y))
+
+    def deciduous(path, pos):
+        group(path, pos, float(rng.uniform(0.0, 360.0)))
+        trunk_h = rng.uniform(1.8, 2.6)
+        trunk_r = rng.uniform(0.12, 0.18)
+        cylinder(f"{path}/trunk", (0.0, 0.0, trunk_h / 2), trunk_r, trunk_h, "bark")
+        crown_r = rng.uniform(1.1, 1.6)
+        leaf = ["leaf_a", "leaf_b", "leaf_c"][int(rng.integers(3))]
+        sphere(f"{path}/crown0", (0.0, 0.0, trunk_h + 0.6 * crown_r), crown_r, leaf, scale_z=0.85)
+        for j in range(int(rng.integers(2, 4))):
+            a = rng.uniform(0.0, 2 * math.pi)
+            d = rng.uniform(0.4, 0.7) * crown_r
+            r = rng.uniform(0.55, 0.75) * crown_r
+            z = trunk_h + rng.uniform(0.3, 1.0) * crown_r
+            sphere(f"{path}/crown{j + 1}", (d * math.cos(a), d * math.sin(a), z), r, leaf, scale_z=0.85)
+
+    def conifer(path, pos):
+        group(path, pos)
+        trunk_h = rng.uniform(0.9, 1.3)
+        cylinder(f"{path}/trunk", (0.0, 0.0, trunk_h / 2), 0.13, trunk_h, "bark")
+        r0 = rng.uniform(1.0, 1.3)
+        h0 = rng.uniform(2.6, 3.4)
+        cone(f"{path}/crown0", (0.0, 0.0, trunk_h - 0.2 + h0 / 2), r0, h0, "conifer")
+        cone(f"{path}/crown1", (0.0, 0.0, trunk_h + 0.5 * h0 + 0.35 * h0), 0.65 * r0, 0.7 * h0, "conifer")
+
+    n_conifer = 0
+    for i, (x, y) in enumerate(tree_pos):
+        if rng.uniform() < CONIFER_RATIO:
+            conifer(f"{TREES}/tree{i:02d}", (x, y, 0.0))
+            n_conifer += 1
+        else:
+            deciduous(f"{TREES}/tree{i:02d}", (x, y, 0.0))
+
+    stage.GetRootLayer().Save()
+
+    n_col = sum(1 for p in stage.Traverse() if p.HasAPI(UsdPhysics.CollisionAPI))
+    print(f"Created environment: {OUT}")
+    print(f"  benches {n_bench}, canopies {len(CANOPY_YS)}, trees {len(tree_pos)} "
+          f"({n_conifer} conifer), colliders {n_col}")
+finally:
+    simulation_app.close()
