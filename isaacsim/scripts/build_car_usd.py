@@ -535,18 +535,17 @@ try:
         rigid_body(wheel, wpos, MASS_WHEEL, com=(0, 0, 0), inertia=wheel_I)
         mesh(wheel, "tire", tire_mesh(sy), "rubber", wpos)
         mesh(wheel, "rim", rim_mesh(sy), "rim_blk", wpos)
-        # 충돌체: 32각 원통 메시(정점 64개) + convexHull 근사 (customGeometry 미사용)
-        cmb = MB().cyl((0, -WHEEL_W/2, 0), (0, WHEEL_W/2, 0), WHEEL_R, 32)
-        col = UsdGeom.Mesh.Define(stage, f"{wheel}/collision")
-        col.CreatePointsAttr(Vt.Vec3fArray([Gf.Vec3f(*p) for p in cmb.P]))
-        col.CreateFaceVertexCountsAttr(Vt.IntArray(cmb.C))
-        col.CreateFaceVertexIndicesAttr(Vt.IntArray(cmb.I))
-        Pc = np.array(cmb.P)
-        col.CreateExtentAttr(Vt.Vec3fArray([Gf.Vec3f(*Pc.min(0)), Gf.Vec3f(*Pc.max(0))]))
+        # Collider: analytic cylinder along the axle (Y). A polygonal convex hull makes the
+        # wheel bump on every facet (~93 Hz at 1 m/s), so keep
+        # /physics/collisionApproximateCylinders disabled (default) to stay exact.
+        col = UsdGeom.Cylinder.Define(stage, f"{wheel}/collision")
+        col.CreateRadiusAttr(WHEEL_R)
+        col.CreateHeightAttr(WHEEL_W)
+        col.CreateAxisAttr(UsdGeom.Tokens.y)
+        col.CreateExtentAttr([(-WHEEL_R, -WHEEL_W/2, -WHEEL_R), (WHEEL_R, WHEEL_W/2, WHEEL_R)])
         col.CreatePurposeAttr(UsdGeom.Tokens.guide)
         cp = col.GetPrim()
         UsdPhysics.CollisionAPI.Apply(cp)
-        UsdPhysics.MeshCollisionAPI.Apply(cp).CreateApproximationAttr("convexHull")
         bind_phys(cp, phys_mat)
         bodies_for_filter.append(wheel)
 
