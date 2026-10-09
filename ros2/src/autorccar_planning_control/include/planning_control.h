@@ -24,22 +24,23 @@ using frenet_optimal_path::FrenetOptimalPath;
 using frenet_optimal_path::FrenetPath;
 
 struct PurePursuitParameters {
-    double min_look_ahead_distance = 0.3;
-    double look_ahead_distance = 0.3;
+    double min_look_ahead_distance{0.3};
+    double look_ahead_distance{0.3};
 };
 
 struct ControlParameters {
-    double goal_reach_threshold = 0.3;
-    double accel = 0.0;
-    double decel = 0.0;
-    double control_dt = 0.0;
+    double goal_reach_threshold{0.3};
+    double accel{0.0};
+    double decel{0.0};
+    double control_dt{0.0};
+    double min_command_speed{0.0};
     PurePursuitParameters pure_pursuit;
 };
 
 struct Parameters {
-    double wheelbase = 0.0;
-    double max_steering_angle = 0.0;
-    double target_speed = 0.0;
+    double wheelbase {0.0};
+    double max_steering_angle {0.0};
+    double target_speed {0.0};
     ControlParameters control;
     frenet_optimal_path::Parameters frenet;
 };
@@ -63,7 +64,7 @@ class PlanningControl {
     Path GetCurrentLocalPath();
 
    private:
-    double CalcSpeedCommand(const State& state, double target_speed);
+    double CalcSpeedCommand(const State& state, double target_speed, double terminal_speed);
     std::pair<bool, double> CalculateSteeringCommand(const State& state);
     double CalcHeadingError(const State& state) const;
     double CalcSteeringAngle(double deviation_angle) const;
@@ -71,9 +72,9 @@ class PlanningControl {
     bool GoalReached(const State& state) const;
 
     Parameters parameters_;
-    double look_ahead_distance_squared_ = 0.0;
-    double goal_reach_threshold_squared_ = 0.0;
-    double current_target_speed_ = 0.0;
+    double look_ahead_distance_squared_ {0.0};
+    double goal_reach_threshold_squared_{0.0};
+    double current_target_speed_{0.0};
     Point goal_;
     Point look_ahead_point_{0.0, 0.0};
     bool got_global_path_ = false;

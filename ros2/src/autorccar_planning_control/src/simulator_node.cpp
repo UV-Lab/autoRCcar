@@ -23,6 +23,7 @@ class SimulatorNode : public rclcpp::Node {
         get_parameter_or<int>("simulator.simulation_hz", sim_hz_, sim_hz_);
         get_parameter_or<int>("simulator.nav_pub_hz", nav_pub_hz_, nav_pub_hz_);
         get_parameter_or<int>("simulator.bounding_box_pub_hz", bounding_box_pub_hz_, bounding_box_pub_hz_);
+        get_parameter_or<int>("nav.state_deadline", nav_state_deadline_, nav_state_deadline_);
         parameters_.dt = 1.0 / sim_hz_;
 
         // initialize
@@ -43,8 +44,8 @@ class SimulatorNode : public rclcpp::Node {
                               bounding_box_pub_timer_callback);
 
         // publisher
-        nav_state_publisher_ =
-            create_publisher<autorccar_interfaces::msg::NavState>("nav_topic", rclcpp::SystemDefaultsQoS());
+        nav_state_publisher_ = create_publisher<autorccar_interfaces::msg::NavState>(
+            "nav_topic", rclcpp::SystemDefaultsQoS().deadline(std::chrono::milliseconds(nav_state_deadline_)));
 
         bounding_box_publisher_ =
             create_publisher<autorccar_interfaces::msg::BoundingBoxes>("bounding_boxes", rclcpp::SystemDefaultsQoS());
@@ -90,12 +91,13 @@ class SimulatorNode : public rclcpp::Node {
             nav_state_msg.position.x = state.x;
             nav_state_msg.position.y = state.y;
             nav_state_msg.position.z = 0.0;
-            nav_state_msg.velocity.x = state.speed;
-            nav_state_msg.velocity.y = 0.0;
-            nav_state_msg.velocity.z = 0.0;
             Eigen::Quaterniond quaternion(Eigen::AngleAxisd(0.0, Eigen::Vector3d::UnitX()) *
                                           Eigen::AngleAxisd(0.0, Eigen::Vector3d::UnitY()) *
                                           Eigen::AngleAxisd(state.yaw, Eigen::Vector3d::UnitZ()));
+            Eigen::Vector3d vel_world{quaternion * Eigen::Vector3d(state.speed, 0.0, 0.0)};
+            nav_state_msg.velocity.x = vel_world.x();
+            nav_state_msg.velocity.y = vel_world.y();
+            nav_state_msg.velocity.z = vel_world.z();
             nav_state_msg.quaternion.w = quaternion.w();
             nav_state_msg.quaternion.x = quaternion.x();
             nav_state_msg.quaternion.y = quaternion.y();
@@ -209,6 +211,7 @@ class SimulatorNode : public rclcpp::Node {
     int nav_pub_hz_{100};
     int bounding_box_pub_hz_{10};
     int control_command_deadline_{1000};
+    int nav_state_deadline_{200};
     Eigen::Vector2d goal_position_{0.0, 0.0};
 };
 

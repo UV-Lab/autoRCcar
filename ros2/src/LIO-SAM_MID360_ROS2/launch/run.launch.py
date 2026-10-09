@@ -12,6 +12,8 @@ def generate_launch_description():
     parameter_file = LaunchConfiguration('params_file')
     xacro_path = os.path.join(share_dir, 'config', 'robot.urdf.xacro')
     rviz_config_file = os.path.join(share_dir, 'config', 'rviz2.rviz')
+    nav_config_file = os.path.join(
+        get_package_share_directory('autorccar_planning_control'), 'launch', 'nav.yaml')
 
     params_declare = DeclareLaunchArgument(
         'params_file',
@@ -43,7 +45,7 @@ def generate_launch_description():
             package='lio_sam',
             executable='lio_sam_imuPreintegration',
             name='lio_sam_imuPreintegration',
-            parameters=[parameter_file],
+            parameters=[parameter_file, nav_config_file],
             output='screen'
         ),
         Node(
