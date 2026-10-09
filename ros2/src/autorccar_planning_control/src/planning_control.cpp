@@ -90,7 +90,7 @@ ControlCommand PlanningControl::GenerateMotionCommand() {
         std::cout << "frenet optimal path is not generated." << std::endl;
         return {0.0, 0.0};
     }
-    Path local_trajectory = current_frenet_path_.path;
+    Path local_trajectory{current_frenet_path_.path};
     local_path_.reset();
     local_path_ = std::make_unique<CubicSplinePath>(std::move(local_trajectory));
 
@@ -103,8 +103,9 @@ ControlCommand PlanningControl::GenerateMotionCommand() {
         std::cout << "Frenet path too short to extract target speed." << std::endl;
         return {0.0, 0.0};
     }
-    double target_speed = current_frenet_path_.d_s.at(1);
-    double speed = CalcSpeedCommand(current_state_, target_speed);
+    double target_speed{current_frenet_path_.d_s.at(1)};
+    double terminal_speed{current_frenet_path_.d_s.back()};
+    double speed{CalcSpeedCommand(current_state_, target_speed, terminal_speed)};
 
     if (speed == 0.0) return {0.0, 0.0};
 
@@ -122,10 +123,10 @@ Point PlanningControl::GetLookAheadPoint() { return look_ahead_point_; }
 
 Path PlanningControl::GetCurrentLocalPath() { return current_frenet_path_.path; }
 
-double PlanningControl::CalcSpeedCommand(const State& state, const double target_speed) {
+double PlanningControl::CalcSpeedCommand(const State& state, const double target_speed, const double terminal_speed) {
     Point position(state.pos.x(), state.pos.y());
-    double remain_distance = std::max(0.0, global_path_->GetRemainDistance(position));
-    double stop_distance = (target_speed * target_speed) / (2 * parameters_.control.decel);
+    double remain_distance{std::max(0.0, global_path_->GetRemainDistance(position))};
+    double stop_distance{(target_speed * target_speed) / (2 * parameters_.control.decel)};
 
     if (remain_distance < stop_distance) {
         current_target_speed_ = sqrt(2 * parameters_.control.decel * remain_distance);
@@ -141,6 +142,11 @@ double PlanningControl::CalcSpeedCommand(const State& state, const double target
                 current_target_speed_ = 0.0;
             }
         }
+
+        if (terminal_speed >= parameters_.control.min_command_speed &&
+            current_target_speed_ < parameters_.control.min_command_speed) {
+            current_target_speed_ = parameters_.control.min_command_speed;
+        }
     }
 
     return current_target_speed_;
@@ -151,31 +157,31 @@ std::pair<bool, double> PlanningControl::CalculateSteeringCommand(const State& s
         std::cout << "Cannot find look ahead point.";
         return {false, 0.0};
     }
-    double heading_error = CalcHeadingError(state);
-    double steering_angle = CalcSteeringAngle(heading_error);
+    double heading_error{CalcHeadingError(state)};
+    double steering_angle{CalcSteeringAngle(heading_error)};
     return {true, steering_angle};
 }
 
 bool PlanningControl::FindLookAheadPoint(const State& state) {
     Point position(state.pos.x(), state.pos.y());
-    Reference reference = local_path_->ReferencePoint(position);
+    Reference reference{local_path_->ReferencePoint(position)};
 
-    Point ahead_point = reference.point + Point(cos(reference.heading), sin(reference.heading)) *
-                                              parameters_.control.pure_pursuit.look_ahead_distance;
-    Reference reference_ahead_point = local_path_->ReferencePoint(ahead_point);
+    Point ahead_point{reference.point + Point(cos(reference.heading), sin(reference.heading)) *
+                                            parameters_.control.pure_pursuit.look_ahead_distance};
+    Reference reference_ahead_point{local_path_->ReferencePoint(ahead_point)};
     look_ahead_point_ = reference_ahead_point.point;
     return true;
 }
 
 double PlanningControl::CalcHeadingError(const State& state) const {
-    double heading = GetCurrentHeading(state);
-    Point target_vec = look_ahead_point_ - Point(state.pos.x(), state.pos.y());
+    double heading{GetCurrentHeading(state)};
+    Point target_vec{look_ahead_point_ - Point(state.pos.x(), state.pos.y())};
     return atan2(target_vec.y(), target_vec.x()) - heading;
 }
 
 double PlanningControl::CalcSteeringAngle(double heading_error) const {
-    double steering_angle =
-        atan2(2.0 * parameters_.wheelbase * sin(heading_error), parameters_.control.pure_pursuit.look_ahead_distance);
+    double steering_angle{
+        atan2(2.0 * parameters_.wheelbase * sin(heading_error), parameters_.control.pure_pursuit.look_ahead_distance)};
     return std::clamp(steering_angle, -parameters_.max_steering_angle, parameters_.max_steering_angle);
 }
 

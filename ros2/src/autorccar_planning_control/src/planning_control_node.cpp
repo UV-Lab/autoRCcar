@@ -124,6 +124,8 @@ class PlanningControlNode : public rclcpp::Node {
 
         get_parameter_or<double>("controller.accel", parameters_.control.accel, parameters_.control.accel);
         get_parameter_or<double>("controller.decel", parameters_.control.decel, parameters_.control.decel);
+        get_parameter_or<double>("controller.min_command_speed", parameters_.control.min_command_speed,
+                                 parameters_.control.min_command_speed);
         get_parameter_or<double>("controller.pure_pursuiter.look_ahead_distance",
                                  parameters_.control.pure_pursuit.look_ahead_distance,
                                  parameters_.control.pure_pursuit.look_ahead_distance);
